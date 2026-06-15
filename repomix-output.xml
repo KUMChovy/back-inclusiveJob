@@ -1,0 +1,486 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+Conexion.php
+Modelo/Administrador/admin.php
+Modelo/Administrador/empresas.php
+Modelo/Postulante/pos.php
+Modelo/Reclutador/reclu.php
+Modelo/verificacion.php
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="Modelo/Administrador/empresas.php">
+<?php
+// Modelo/Administrador/empresas.php
+
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
+header("Content-Type: application/json; charset=utf-8");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
+require_once '../../Conexion.php';
+$con = conectarbd();
+
+// ── Helper respuesta ──────────────────────────────────────────
+function responder(bool $ok, string $mensaje, mixed $datos = null, int $code = 200): void
+{
+    http_response_code($code);
+    echo json_encode([
+        'success' => $ok,
+        'message' => $mensaje,
+        'data'    => $datos,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ── Acción ───────────────────────────────────────────────────
+$accion = $_GET['accion'] ?? '';
+
+// ════════════════════════════════════════════════════════════
+// GET  — listar empresas con filtros y búsqueda
+// ════════════════════════════════════════════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'listar') {
+
+    $estado = $_GET['estado'] ?? 'todas';    // todas | 0 (pendiente) | 1 (aprobada)
+    $buscar = $_GET['buscar'] ?? '';
+    $pagina = max(1, (int)($_GET['pagina'] ?? 1));
+    $limite = max(1, min(100, (int)($_GET['limite'] ?? 15)));
+    $offset = ($pagina - 1) * $limite;
+
+    // Construir WHERE dinámico
+    $condiciones = [];
+    $params      = [];
+    $tipos        = '';
+
+    if ($estado === '0') {
+        $condiciones[] = 'e.estado_validacion = 0';
+    } elseif ($estado === '1') {
+        $condiciones[] = 'e.estado_validacion = 1';
+    }
+
+    if ($buscar !== '') {
+        $condiciones[] = '(e.nombre_empresas LIKE ? OR e.correo_empresa LIKE ? OR e.direccion LIKE ?)';
+        $like = "%{$buscar}%";
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+        $tipos .= 'sss';
+    }
+
+    $where = count($condiciones) ? 'WHERE ' . implode(' AND ', $condiciones) : '';
+
+    // Total
+    $sqlTotal = "SELECT COUNT(*) AS total FROM empresas e $where";
+    $stmtT = mysqli_prepare($con, $sqlTotal);
+    if ($params) mysqli_stmt_bind_param($stmtT, $tipos, ...$params);
+    mysqli_stmt_execute($stmtT);
+    $total = (int) mysqli_fetch_assoc(mysqli_stmt_get_result($stmtT))['total'];
+
+    // Datos + número de reclutadores por empresa
+    $sql = "
+        SELECT
+            e.id_empresas,
+            e.nombre_empresas,
+            e.descripcion,
+            e.direccion,
+            e.telefono_empresa,
+            e.correo_empresa,
+            e.sitio_web,
+            e.estado_validacion,
+            e.fecha_registro_empres AS fecha_registro,
+            COUNT(DISTINCT r.id_reclutador) AS total_reclutadores,
+            COUNT(DISTINCT v.id_vacante) AS total_vacantes
+        FROM empresas e
+        LEFT JOIN reclutadores r ON r.id_empresas = e.id_empresas
+        LEFT JOIN vacantes v     ON v.id_reclutador = r.id_reclutador
+        $where
+        GROUP BY e.id_empresas
+        ORDER BY e.fecha_registro_empres DESC
+        LIMIT ? OFFSET ?
+    ";
+
+    $allParams = array_merge($params, [$limite, $offset]);
+    $allTipos  = $tipos . 'ii';
+
+    $stmt = mysqli_prepare($con, $sql);
+    mysqli_stmt_bind_param($stmt, $allTipos, ...$allParams);
+    mysqli_stmt_execute($stmt);
+    $res  = mysqli_stmt_get_result($stmt);
+
+    $empresas = [];
+    while ($fila = mysqli_fetch_assoc($res)) {
+        $fila['estado_validacion'] = (int) $fila['estado_validacion'];
+        $empresas[] = $fila;
+    }
+
+    mysqli_close($con);
+    responder(true, 'Empresas obtenidas.', [
+        'empresas'    => $empresas,
+        'total'       => $total,
+        'pagina'      => $pagina,
+        'limite'      => $limite,
+        'total_paginas' => ceil($total / $limite),
+    ]);
+}
+
+// ════════════════════════════════════════════════════════════
+// GET  — detalle de una empresa
+// ════════════════════════════════════════════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'detalle') {
+
+    $id = (int)($_GET['id'] ?? 0);
+    if (!$id) responder(false, 'ID requerido.', null, 400);
+
+    // Datos empresa
+    $stmt = mysqli_prepare($con, "SELECT * FROM empresas WHERE id_empresas = ?");
+    mysqli_stmt_bind_param($stmt, 'i', $id);
+    mysqli_stmt_execute($stmt);
+    $empresa = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    if (!$empresa) responder(false, 'Empresa no encontrada.', null, 404);
+
+    // Reclutadores
+    $stmt2 = mysqli_prepare($con, "
+        SELECT r.id_reclutador, r.puesto,
+               u.nombres, u.apellidos, u.correo, u.telefono, u.foto_perfil, u.estado
+        FROM reclutadores r
+        JOIN usuarios u ON u.id_usuario = r.id_usuario
+        WHERE r.id_empresas = ?
+    ");
+    mysqli_stmt_bind_param($stmt2, 'i', $id);
+    mysqli_stmt_execute($stmt2);
+    $resRec = mysqli_stmt_get_result($stmt2);
+    $reclutadores = [];
+    while ($r = mysqli_fetch_assoc($resRec)) $reclutadores[] = $r;
+
+    // Vacantes recientes
+    $stmt3 = mysqli_prepare($con, "
+        SELECT v.id_vacante, v.titulo_puesto, v.modalidad, v.estado,
+               v.fecha_publicacion,
+               COUNT(p.id_postulacion) AS total_postulaciones
+        FROM vacantes v
+        JOIN reclutadores rec ON rec.id_reclutador = v.id_reclutador
+        LEFT JOIN postulaciones p ON p.id_vacante = v.id_vacante
+        WHERE rec.id_empresas = ?
+        GROUP BY v.id_vacante
+        ORDER BY v.fecha_publicacion DESC
+        LIMIT 10
+    ");
+    mysqli_stmt_bind_param($stmt3, 'i', $id);
+    mysqli_stmt_execute($stmt3);
+    $resVac = mysqli_stmt_get_result($stmt3);
+    $vacantes = [];
+    while ($v = mysqli_fetch_assoc($resVac)) $vacantes[] = $v;
+
+    $empresa['estado_validacion'] = (int) $empresa['estado_validacion'];
+    mysqli_close($con);
+    responder(true, 'Detalle obtenido.', [
+        'empresa'      => $empresa,
+        'reclutadores' => $reclutadores,
+        'vacantes'     => $vacantes,
+    ]);
+}
+
+// ════════════════════════════════════════════════════════════
+// POST — aprobar empresa  (estado_validacion = 1)
+// ════════════════════════════════════════════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'aprobar') {
+
+    $id = (int)($_GET['id'] ?? 0);
+    if (!$id) responder(false, 'ID requerido.', null, 400);
+
+    $stmt = mysqli_prepare($con, "UPDATE empresas SET estado_validacion = 1 WHERE id_empresas = ?");
+    mysqli_stmt_bind_param($stmt, 'i', $id);
+    $ok = mysqli_stmt_execute($stmt);
+
+    if (!$ok || mysqli_stmt_affected_rows($stmt) === 0)
+        responder(false, 'No se pudo aprobar o la empresa ya estaba aprobada.', null, 400);
+
+    mysqli_close($con);
+    responder(true, 'Empresa aprobada correctamente.');
+}
+
+// ════════════════════════════════════════════════════════════
+// POST — rechazar empresa  (estado_validacion = 2)
+// ════════════════════════════════════════════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'rechazar') {
+
+    $id   = (int)($_GET['id'] ?? 0);
+    $body = json_decode(file_get_contents('php://input'), true);
+    $motivo = trim($body['motivo'] ?? '');
+
+    if (!$id) responder(false, 'ID requerido.', null, 400);
+
+    // Guardamos estado 2 = rechazada; si quieres un campo motivo en BD, agrégalo
+    $stmt = mysqli_prepare($con, "UPDATE empresas SET estado_validacion = 2 WHERE id_empresas = ?");
+    mysqli_stmt_bind_param($stmt, 'i', $id);
+    $ok = mysqli_stmt_execute($stmt);
+
+    if (!$ok || mysqli_stmt_affected_rows($stmt) === 0)
+        responder(false, 'No se pudo rechazar la empresa.', null, 400);
+
+    mysqli_close($con);
+    responder(true, 'Empresa rechazada.');
+}
+
+// ════════════════════════════════════════════════════════════
+// POST — suspender empresa  (estado_validacion = 3)
+// ════════════════════════════════════════════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'suspender') {
+
+    $id = (int)($_GET['id'] ?? 0);
+    if (!$id) responder(false, 'ID requerido.', null, 400);
+
+    $stmt = mysqli_prepare($con, "UPDATE empresas SET estado_validacion = 3 WHERE id_empresas = ?");
+    mysqli_stmt_bind_param($stmt, 'i', $id);
+    $ok = mysqli_stmt_execute($stmt);
+
+    if (!$ok || mysqli_stmt_affected_rows($stmt) === 0)
+        responder(false, 'No se pudo suspender la empresa.', null, 400);
+
+    mysqli_close($con);
+    responder(true, 'Empresa suspendida.');
+}
+
+// ════════════════════════════════════════════════════════════
+// POST — reactivar empresa (estado_validacion = 1)
+// ════════════════════════════════════════════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'reactivar') {
+
+    $id = (int)($_GET['id'] ?? 0);
+    if (!$id) responder(false, 'ID requerido.', null, 400);
+
+    $stmt = mysqli_prepare($con, "UPDATE empresas SET estado_validacion = 1 WHERE id_empresas = ?");
+    mysqli_stmt_bind_param($stmt, 'i', $id);
+    $ok = mysqli_stmt_execute($stmt);
+
+    if (!$ok || mysqli_stmt_affected_rows($stmt) === 0)
+        responder(false, 'No se pudo reactivar la empresa.', null, 400);
+
+    mysqli_close($con);
+    responder(true, 'Empresa reactivada.');
+}
+
+responder(false, 'Acción no reconocida.', null, 400);
+</file>
+
+<file path="Conexion.php">
+<?php
+
+function conectarbd(){
+    $con = mysqli_connect("localhost", "root", "", "Inclusive");
+
+    if(!$con){
+        die("Error de conexión: " . mysqli_connect_error());
+    }
+
+    return $con;
+}
+</file>
+
+<file path="Modelo/Administrador/admin.php">
+<?php
+// Modelo/Administrador/admin.php
+
+
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
+header("Content-Type: application/json; charset=utf-8");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
+require_once '../../Conexion.php';
+
+$con = conectarbd();
+
+// ── Helper: respuesta JSON ────────────────────────────────────
+function responder(bool $ok, string $mensaje, mixed $datos = null, int $code = 200): void
+{
+    http_response_code($code);
+    echo json_encode([
+        'success' => $ok,
+        'message' => $mensaje,
+        'data'    => $datos,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ── Solo GET permitido ────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    responder(false, 'Método no permitido.', null, 405);
+}
+
+// ── Acción según parámetro ────────────────────────────────────
+$accion = $_GET['accion'] ?? 'stats';
+
+if ($accion === 'stats') {
+    $stats = [];
+
+    // Total usuarios registrados
+    $r = mysqli_query($con, "SELECT COUNT(*) AS total FROM usuarios");
+    $stats['total_usuarios'] = (int) mysqli_fetch_assoc($r)['total'];
+
+    // Total postulantes (id_rol = 2)
+    $r = mysqli_query($con, "SELECT COUNT(*) AS total FROM usuarios WHERE id_rol = 2");
+    $stats['total_postulantes'] = (int) mysqli_fetch_assoc($r)['total'];
+
+    // Total reclutadores (id_rol = 3)
+    $r = mysqli_query($con, "SELECT COUNT(*) AS total FROM usuarios WHERE id_rol = 3");
+    $stats['total_reclutadores'] = (int) mysqli_fetch_assoc($r)['total'];
+
+    // Total empresas
+    $r = mysqli_query($con, "SELECT COUNT(*) AS total FROM empresas");
+    $stats['total_empresas'] = (int) mysqli_fetch_assoc($r)['total'];
+
+    // Empresas pendientes de validación (estado_validacion = 0)
+    $r = mysqli_query($con, "SELECT COUNT(*) AS total FROM empresas WHERE estado_validacion = 0");
+    $stats['empresas_pendientes'] = (int) mysqli_fetch_assoc($r)['total'];
+
+    // Vacantes activas
+    $r = mysqli_query($con, "SELECT COUNT(*) AS total FROM vacantes WHERE estado = 'activa'");
+    $stats['vacantes_activas'] = (int) mysqli_fetch_assoc($r)['total'];
+
+    // Vacantes cerradas
+    $r = mysqli_query($con, "SELECT COUNT(*) AS total FROM vacantes WHERE estado = 'cerrada'");
+    $stats['vacantes_cerradas'] = (int) mysqli_fetch_assoc($r)['total'];
+
+    // Total postulaciones
+    $r = mysqli_query($con, "SELECT COUNT(*) AS total FROM postulaciones");
+    $stats['postulaciones_realizadas'] = (int) mysqli_fetch_assoc($r)['total'];
+
+    // Total reportes recibidos
+    $r = mysqli_query($con, "SELECT COUNT(*) AS total FROM reporte_vacante");
+    $stats['reportes_recibidos'] = (int) mysqli_fetch_assoc($r)['total'];
+
+    // ── Actividad por mes (últimos 6 meses) ──────────────────
+    $sql_meses = "
+        SELECT
+            DATE_FORMAT(fecha_publicacion, '%b') AS mes,
+            DATE_FORMAT(fecha_publicacion, '%Y-%m') AS mes_orden,
+            COUNT(*) AS vacantes
+        FROM vacantes
+        WHERE fecha_publicacion >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+        GROUP BY mes_orden, mes
+        ORDER BY mes_orden ASC
+    ";
+    $r_meses = mysqli_query($con, $sql_meses);
+    $meses   = [];
+    while ($fila = mysqli_fetch_assoc($r_meses)) {
+        $meses[] = [
+            'mes'      => $fila['mes'],
+            'vacantes' => (int) $fila['vacantes'],
+        ];
+    }
+    $stats['actividad_mensual'] = $meses;
+
+    // ── Últimas 5 vacantes publicadas ────────────────────────
+    $sql_vacantes = "
+        SELECT
+            v.id_vacante,
+            v.titulo_puesto,
+            e.nombre_empresas AS empresa,
+            v.modalidad,
+            v.estado,
+            v.fecha_publicacion
+        FROM vacantes v
+        JOIN reclutadores rec ON rec.id_reclutador = v.id_reclutador
+        JOIN empresas e       ON e.id_empresas     = rec.id_empresas
+        ORDER BY v.fecha_publicacion DESC
+        LIMIT 5
+    ";
+    $r_vac = mysqli_query($con, $sql_vacantes);
+    $ultimas_vacantes = [];
+    while ($fila = mysqli_fetch_assoc($r_vac)) {
+        $ultimas_vacantes[] = $fila;
+    }
+    $stats['ultimas_vacantes'] = $ultimas_vacantes;
+
+    // ── Últimas 5 empresas pendientes ────────────────────────
+    $sql_emp = "
+        SELECT
+            id_empresas,
+            nombre_empresas,
+            correo_empresa,
+            fecha_registro_empres AS fecha_registro
+        FROM empresas
+        WHERE estado_validacion = 0
+        ORDER BY fecha_registro_empres DESC
+        LIMIT 5
+    ";
+    $r_emp = mysqli_query($con, $sql_emp);
+    $empresas_pendientes = [];
+    while ($fila = mysqli_fetch_assoc($r_emp)) {
+        $empresas_pendientes[] = $fila;
+    }
+    $stats['empresas_pendientes_lista'] = $empresas_pendientes;
+
+    mysqli_close($con);
+    responder(true, 'Estadísticas obtenidas correctamente.', $stats);
+}
+
+responder(false, 'Acción no reconocida.', null, 400);
+</file>
+
+<file path="Modelo/Postulante/pos.php">
+
+</file>
+
+<file path="Modelo/Reclutador/reclu.php">
+
+</file>
+
+<file path="Modelo/verificacion.php">
+
+</file>
+
+</files>
