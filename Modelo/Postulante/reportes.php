@@ -2,8 +2,13 @@
 
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, DELETE");
+header("Access-Control-Allow-Methods: GET, POST, DELETE, PUT, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+  http_response_code(200);
+  exit;
+}
 
 require_once("../../Conexion.php");
 
@@ -13,13 +18,13 @@ $con = conectarbd();
 $id_usuario = 4;
 
 /* ─────────────────────────────────────
-   🧠 ACCIÓN (LISTAR O ELIMINAR)
+  ACCIÓN (LISTAR O ELIMINAR)
 ───────────────────────────────────── */
 
 $method = $_SERVER['REQUEST_METHOD'];
 
 /* ─────────────────────────────────────
-   🟢 LISTAR REPORTES (GET)
+  LISTAR REPORTES (GET)
 ───────────────────────────────────── */
 if ($method === 'GET') {
 
@@ -93,7 +98,7 @@ if ($method === 'GET') {
 }
 
 /* ─────────────────────────────────────
-   🔴 ELIMINAR REPORTE (DELETE)
+   ELIMINAR REPORTE (DELETE)
 ───────────────────────────────────── */
 if ($method === 'DELETE') {
 
@@ -119,6 +124,41 @@ if ($method === 'DELETE') {
   echo json_encode([
     "ok" => $ok,
     "msg" => $ok ? "Reporte eliminado" : "Error al eliminar"
+  ]);
+
+  $stmt->close();
+}
+
+/* ─────────────────────────────────────
+  EDITAR REPORTE (PUT)
+───────────────────────────────────── */
+if ($method === 'PUT') {
+
+  $data = json_decode(file_get_contents("php://input"), true);
+
+  $id_reporte = $data["id_reporte"] ?? null;
+  $motivo = $data["motivo"] ?? null;
+
+  if (!$id_reporte || !$motivo) {
+    echo json_encode([
+      "ok" => false,
+      "msg" => "Faltan datos"
+    ]);
+    exit;
+  }
+
+  $sql = "UPDATE reporte_vacante 
+          SET motivo = ? 
+          WHERE id_reporte = ? AND id_usuario = ?";
+
+  $stmt = $con->prepare($sql);
+  $stmt->bind_param("sii", $motivo, $id_reporte, $id_usuario);
+
+  $ok = $stmt->execute();
+
+  echo json_encode([
+    "ok" => $ok,
+    "msg" => $ok ? "Motivo actualizado" : "Error al actualizar"
   ]);
 
   $stmt->close();
