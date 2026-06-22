@@ -2,103 +2,127 @@
 
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, DELETE");
+header("Access-Control-Allow-Headers: Content-Type");
 
 require_once("../../Conexion.php");
 
 $con = conectarbd();
 
-/*Cambiar luego con el sesion*/
-$id_usuario = 3;
+/* Cambiar luego con sesión */
+$id_usuario = 4;
 
-$sql = "
-SELECT
-  r.id_reporte,
-  r.motivo,
-  r.fecha_reporte,
+/* ─────────────────────────────────────
+   🧠 ACCIÓN (LISTAR O ELIMINAR)
+───────────────────────────────────── */
 
-  v.id_vacante,
-  v.titulo_puesto,
-  v.descripcion_puesto,
-  v.requisitos,
-  v.modalidad,
-  v.salario_min,
-  v.salario_max,
-  v.estado,
-  v.fecha_publicacion,
-  v.fecha_cierre,
+$method = $_SERVER['REQUEST_METHOD'];
 
-  e.nombre_empresas
+/* ─────────────────────────────────────
+   🟢 LISTAR REPORTES (GET)
+───────────────────────────────────── */
+if ($method === 'GET') {
 
-FROM reporte_vacante r
+  $sql = "
+  SELECT
+    r.id_reporte,
+    r.motivo,
+    r.fecha_reporte,
 
-INNER JOIN vacantes v
-  ON r.id_vacante = v.id_vacante
+    v.id_vacante,
+    v.titulo_puesto,
+    v.descripcion_puesto,
+    v.requisitos,
+    v.modalidad,
+    v.salario_min,
+    v.salario_max,
+    v.estado,
+    v.fecha_publicacion,
+    v.fecha_cierre,
 
-INNER JOIN reclutadores rec
-  ON v.id_reclutador = rec.id_reclutador
+    e.nombre_empresas
 
-INNER JOIN empresas e
-  ON rec.id_empresas = e.id_empresas
+  FROM reporte_vacante r
 
-WHERE r.id_usuario = ?
+  INNER JOIN vacantes v
+    ON r.id_vacante = v.id_vacante
 
-ORDER BY r.fecha_reporte DESC
-";
+  INNER JOIN reclutadores rec
+    ON v.id_reclutador = rec.id_reclutador
 
-$stmt =
-$con->prepare($sql);
+  INNER JOIN empresas e
+    ON rec.id_empresas = e.id_empresas
 
-$stmt->bind_param(
-"i",
-$id_usuario
-);
+  WHERE r.id_usuario = ?
 
-$stmt->execute();
+  ORDER BY r.fecha_reporte DESC
+  ";
 
-$resultado =
-$stmt->get_result();
+  $stmt = $con->prepare($sql);
+  $stmt->bind_param("i", $id_usuario);
+  $stmt->execute();
+  $resultado = $stmt->get_result();
 
-$reportes=[];
+  $reportes = [];
 
-while(
-$fila=
-$resultado->fetch_assoc()
-){
+  while ($fila = $resultado->fetch_assoc()) {
+    $reportes[] = [
+      "id" => $fila["id_reporte"],
+      "vacante_id" => $fila["id_vacante"],
+      "vacante" => $fila["titulo_puesto"],
+      "descripcion_puesto" => $fila["descripcion_puesto"],
+      "requisitos" => $fila["requisitos"],
+      "modalidad" => $fila["modalidad"],
+      "salario_min" => $fila["salario_min"],
+      "salario_max" => $fila["salario_max"],
+      "estado" => $fila["estado"],
+      "fecha_publicacion" => $fila["fecha_publicacion"],
+      "fecha_cierre" => $fila["fecha_cierre"],
+      "motivo" => $fila["motivo"],
+      "empresa" => $fila["nombre_empresas"],
+      "fecha" => $fila["fecha_reporte"]
+    ];
+  }
 
-$reportes[] = [
-  "id" => $fila["id_reporte"],
-  "vacante_id" => $fila["id_vacante"],
+  echo json_encode([
+    "ok" => true,
+    "data" => $reportes
+  ]);
 
-  "vacante" => $fila["titulo_puesto"],
-  "descripcion_puesto" => $fila["descripcion_puesto"],
-
-  "requisitos" => $fila["requisitos"],
-  "modalidad" => $fila["modalidad"],
-
-  "salario_min" => $fila["salario_min"],
-  "salario_max" => $fila["salario_max"],
-
-  "estado" => $fila["estado"],
-
-  "fecha_publicacion" => $fila["fecha_publicacion"],
-  "fecha_cierre" => $fila["fecha_cierre"],
-
-  "motivo" => $fila["motivo"],
-  "empresa" => $fila["nombre_empresas"],
-  "fecha" => $fila["fecha_reporte"]
-];
-
+  $stmt->close();
 }
 
-echo json_encode([
+/* ─────────────────────────────────────
+   🔴 ELIMINAR REPORTE (DELETE)
+───────────────────────────────────── */
+if ($method === 'DELETE') {
 
-"ok"=>true,
+  $data = json_decode(file_get_contents("php://input"), true);
 
-"data"=>$reportes
+  $id_reporte = $data["id_reporte"] ?? null;
 
-]);
+  if (!$id_reporte) {
+    echo json_encode([
+      "ok" => false,
+      "msg" => "ID de reporte requerido"
+    ]);
+    exit;
+  }
 
-$stmt->close();
+  $sql = "DELETE FROM reporte_vacante WHERE id_reporte = ? AND id_usuario = ?";
+
+  $stmt = $con->prepare($sql);
+  $stmt->bind_param("ii", $id_reporte, $id_usuario);
+
+  $ok = $stmt->execute();
+
+  echo json_encode([
+    "ok" => $ok,
+    "msg" => $ok ? "Reporte eliminado" : "Error al eliminar"
+  ]);
+
+  $stmt->close();
+}
 
 mysqli_close($con);
 
