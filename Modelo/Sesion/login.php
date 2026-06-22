@@ -1,4 +1,4 @@
-<?php
+<?php 
 /* =========================
    SESIÓN SEGURA
 ========================= */
@@ -46,7 +46,7 @@ if (!isset($_SESSION["csrf_token"])) {
 /* =========================
    CONEXIÓN
 ========================= */
-require_once __DIR__ . "/../Conexion.php";
+require_once __DIR__ . "/../../Conexion.php";
 $conn = conectarbd();
 
 /* =========================
@@ -62,6 +62,20 @@ if (!$data) {
 $correo = trim($data["correo"] ?? "");
 $password = $data["password"] ?? "";
 
+/* =========================
+   CSRF VALIDATION (AGREGADO)
+========================= */
+if (!isset($data["csrf"]) || !isset($_SESSION["csrf_token"]) || $data["csrf"] !== $_SESSION["csrf_token"]) {
+    http_response_code(403);
+    echo json_encode([
+        "success" => false,
+        "message" => "CSRF token inválido"
+    ]);
+    exit;
+}
+
+$correo = trim($data["correo"] ?? "");
+$password = $data["password"] ?? "";
 /* =========================
    VALIDACIÓN INPUT
 ========================= */
@@ -114,7 +128,6 @@ $user = mysqli_fetch_assoc($res);
    VALIDACIÓN LOGIN (ANTI ENUMERACIÓN)
 ========================= */
 if (!$user || !password_verify($password, $user["contraseña"])) {
-    // mismo mensaje para evitar ataque de enumeración
     echo json_encode([
         "success" => false,
         "message" => "Credenciales inválidas"
@@ -133,6 +146,13 @@ $_SESSION["user"] = [
     "nombre" => $user["nombres"],
     "apellido" => $user["apellidos"]
 ];
+
+/* =========================
+   CONTROL DE SESIÓN (PARA sesion.php)
+========================= */
+$_SESSION["login_time"] = time();       // momento de login
+$_SESSION["last_activity"] = time();     // última actividad
+$_SESSION["session_timeout"] = 1800;     // 30 minutos inactividad
 
 /* =========================
    RESPUESTA LIMPIA
