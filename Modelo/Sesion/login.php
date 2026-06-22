@@ -62,18 +62,6 @@ if (!$data) {
 $correo = trim($data["correo"] ?? "");
 $password = $data["password"] ?? "";
 
-/* =========================
-   CSRF VALIDATION (AGREGADO)
-========================= */
-if (!isset($data["csrf"]) || !isset($_SESSION["csrf_token"]) || $data["csrf"] !== $_SESSION["csrf_token"]) {
-    http_response_code(403);
-    echo json_encode([
-        "success" => false,
-        "message" => "CSRF token inválido"
-    ]);
-    exit;
-}
-
 $correo = trim($data["correo"] ?? "");
 $password = $data["password"] ?? "";
 /* =========================
