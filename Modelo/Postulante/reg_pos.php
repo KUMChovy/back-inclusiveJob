@@ -270,7 +270,7 @@ if (
 
     /*
     |--------------------------------------------------------------------------
-    | Registro
+    | Registro (genera token pendiente, NO crea el usuario todavía)
     |--------------------------------------------------------------------------
     */
     $result = registrarPostulante(

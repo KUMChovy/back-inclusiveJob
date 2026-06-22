@@ -103,6 +103,8 @@ $sql = "SELECT
             u.apellidos,
             u.correo,
             u.contraseña,
+            u.correo_validado,
+            u.estado,
             u.id_rol,
             r.nombre_rol
         FROM usuarios u
@@ -131,6 +133,34 @@ if (!$user || !password_verify($password, $user["contraseña"])) {
     echo json_encode([
         "success" => false,
         "message" => "Credenciales inválidas"
+    ]);
+    exit;
+}
+
+/* =========================
+   CUENTA DESACTIVADA
+========================= */
+if ((int)$user["estado"] === 0) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Tu cuenta está desactivada. Contacta a soporte."
+    ]);
+    exit;
+}
+
+/* =========================
+   CORREO NO VERIFICADO
+========================= */
+// Capa extra de seguridad: con el flujo actual de registro esto nunca
+// debería pasar (el usuario solo se crea ya verificado), pero queda
+// como protección ante futuros métodos de registro (ej. Google) que
+// pudieran crear usuarios sin verificar.
+if ((int)$user["correo_validado"] === 0) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Debes verificar tu correo antes de iniciar sesión.",
+        "requiere_verificacion" => true,
+        "correo" => $user["correo"]
     ]);
     exit;
 }
