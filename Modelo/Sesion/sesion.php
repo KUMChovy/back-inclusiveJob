@@ -7,10 +7,9 @@ header("Access-Control-Allow-Origin:http://localhost:5173");
 header("Access-Control-Allow-Credentials: true");
 
 /* =========================
-   CONTROL DE SESIÓN (TIMEOUT)
+   VALIDACIÓN DE SESIÓN
 ========================= */
 
-// validar existencia de sesión
 if (!isset($_SESSION["user"])) {
     echo json_encode([
         "auth" => false
@@ -18,21 +17,44 @@ if (!isset($_SESSION["user"])) {
     exit;
 }
 
-// inicializar control si no existe (fallback seguro)
-if (!isset($_SESSION["last_activity"])) {
-    $_SESSION["last_activity"] = time();
-}
+/* =========================
+   CONFIGURACIÓN DE TIMEOUT
+   (solo se define una vez)
+========================= */
 
 if (!isset($_SESSION["session_timeout"])) {
-    $_SESSION["session_timeout"] = 1800; // 30 min por defecto
+    $_SESSION["session_timeout"] = 1800; // 30 min
+}
+
+/* =========================
+   INICIALIZAR ACTIVIDAD
+========================= */
+
+if (!isset($_SESSION["last_activity"])) {
+    $_SESSION["last_activity"] = time();
 }
 
 /* =========================
    EXPIRACIÓN POR INACTIVIDAD
 ========================= */
-if (time() - $_SESSION["last_activity"] > $_SESSION["session_timeout"]) {
 
-    session_unset();
+$inactiveTime = time() - $_SESSION["last_activity"];
+
+if ($inactiveTime > $_SESSION["session_timeout"]) {
+
+    // limpiar sesión completamente
+    $_SESSION = [];
+
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"],
+            $params["domain"],
+            $params["secure"],
+            $params["httponly"]
+        );
+    }
+
     session_destroy();
 
     echo json_encode([
@@ -43,13 +65,16 @@ if (time() - $_SESSION["last_activity"] > $_SESSION["session_timeout"]) {
 }
 
 /* =========================
-   ACTUALIZAR ACTIVIDAD
+   SOLO AQUÍ se actualiza actividad
+   (IMPORTANTE: después de validar timeout)
 ========================= */
-$_SESSION["last_activity"] = time();
+
+//$_SESSION["last_activity"] = time();
 
 /* =========================
-   RESPUESTA SEGURA
+   RESPUESTA
 ========================= */
+
 echo json_encode([
     "auth" => true,
     "user" => $_SESSION["user"]
