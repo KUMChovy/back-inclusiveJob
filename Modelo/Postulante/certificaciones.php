@@ -3,7 +3,7 @@
 require_once("../../Conexion.php");
 
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, OPTIONS");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -13,8 +13,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 $con = conectarbd();
 
-// reemplazar sesión real
+// TODO: reemplazar por sesión
 $id_postulante = 10;
+
 
 /*
 ──────────────────────────────
@@ -24,18 +25,26 @@ GET ?archivo=1&id=#
 */
 
 if (
-    isset($_GET['archivo']) &&
+    $_SERVER['REQUEST_METHOD'] === 'GET'
+    &&
+    isset($_GET['archivo'])
+    &&
     isset($_GET['id'])
 ) {
 
     $id = intval($_GET['id']);
 
     $sql = "
-        SELECT pdf
-        FROM certificaciones
-        WHERE id_certificaciones=?
-        AND id_postulante=?
-        LIMIT 1
+
+    SELECT pdf
+
+    FROM certificaciones
+
+    WHERE id_certificaciones=?
+    AND id_postulante=?
+
+    LIMIT 1
+
     ";
 
     $stmt = $con->prepare($sql);
@@ -52,9 +61,15 @@ if (
 
     $fila = $res->fetch_assoc();
 
-    if ($fila && !empty($fila["pdf"])) {
+    if (
+        $fila
+        &&
+        !empty($fila["pdf"])
+    ) {
 
-        header("Content-Type: application/pdf");
+        header(
+            "Content-Type: application/pdf"
+        );
 
         header(
             "Content-Disposition:inline; filename=certificacion.pdf"
@@ -73,21 +88,344 @@ if (
         echo "PDF no encontrado";
     }
 
+    $stmt->close();
+
+    mysqli_close($con);
+
     exit;
 }
 
+
 /*
 ──────────────────────────────
-LISTAR CERTIFICACIONES
+CREAR / EDITAR
+POST
+──────────────────────────────
+*/
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+header(
+"Content-Type: application/json"
+);
+
+$nombre =
+trim(
+$_POST['nombre_certificacion']
+?? ''
+);
+
+$institucion =
+trim(
+$_POST['institucion_dada']
+?? ''
+);
+
+$id =
+isset($_POST['id'])
+? intval($_POST['id'])
+: null;
+
+if (
+!$nombre
+||
+!$institucion
+) {
+
+http_response_code(
+400
+);
+
+echo json_encode([
+
+"ok"=>false,
+
+"msg"=>"Campos incompletos"
+
+]);
+
+exit;
+
+}
+
+/*
+EDITAR
+*/
+
+if ($id) {
+
+if (
+
+isset($_FILES['pdf'])
+
+&&
+
+$_FILES['pdf']['error']
+===
+
+UPLOAD_ERR_OK
+
+) {
+
+$mime =
+mime_content_type(
+$_FILES['pdf']['tmp_name']
+);
+
+if (
+$mime
+!==
+'application/pdf'
+) {
+
+http_response_code(
+415
+);
+
+echo json_encode([
+
+"ok"=>false,
+
+"msg"=>"Solo PDF"
+
+]);
+
+exit;
+
+}
+
+$pdf =
+file_get_contents(
+$_FILES['pdf']['tmp_name']
+);
+
+$sql = "
+
+UPDATE certificaciones
+
+SET
+
+nombre_certificacion=?,
+institucion_dada=?,
+pdf=?
+
+WHERE id_certificaciones=?
+AND id_postulante=?
+
+";
+
+$stmt =
+$con->prepare(
+$sql
+);
+
+$null =
+null;
+
+$stmt->bind_param(
+"ssbii",
+$nombre,
+$institucion,
+$null,
+$id,
+$id_postulante
+);
+
+$stmt->send_long_data(
+2,
+$pdf
+);
+
+}
+
+else {
+
+$sql = "
+
+UPDATE certificaciones
+
+SET
+
+nombre_certificacion=?,
+institucion_dada=?
+
+WHERE id_certificaciones=?
+AND id_postulante=?
+
+";
+
+$stmt =
+$con->prepare(
+$sql
+);
+
+$stmt->bind_param(
+"ssii",
+$nombre,
+$institucion,
+$id,
+$id_postulante
+);
+
+}
+
+}
+
+/*
+CREAR
+*/
+
+else {
+
+if (
+
+!isset(
+$_FILES['pdf']
+)
+
+||
+
+$_FILES['pdf']['error']
+!==
+
+UPLOAD_ERR_OK
+
+) {
+
+http_response_code(
+400
+);
+
+echo json_encode([
+
+"ok"=>false,
+
+"msg"=>"Selecciona PDF"
+
+]);
+
+exit;
+
+}
+
+$mime =
+mime_content_type(
+$_FILES['pdf']['tmp_name']
+);
+
+if (
+$mime
+!==
+'application/pdf'
+) {
+
+http_response_code(
+415
+);
+
+echo json_encode([
+
+"ok"=>false,
+
+"msg"=>"Solo PDF"
+
+]);
+
+exit;
+
+}
+
+$pdf =
+file_get_contents(
+$_FILES['pdf']['tmp_name']
+);
+
+$sql = "
+
+INSERT INTO certificaciones
+(
+
+nombre_certificacion,
+institucion_dada,
+pdf,
+fecha_emitido,
+id_postulante
+
+)
+
+VALUES
+(
+
+?,
+?,
+?,
+CURDATE(),
+?
+
+)
+
+";
+
+$stmt =
+$con->prepare(
+$sql
+);
+
+$null =
+null;
+
+$stmt->bind_param(
+"ssbi",
+$nombre,
+$institucion,
+$null,
+$id_postulante
+);
+
+$stmt->send_long_data(
+2,
+$pdf
+);
+
+}
+
+$ok =
+$stmt->execute();
+
+echo json_encode([
+
+"ok"=>$ok,
+
+"msg"=>$ok
+? "Guardado correctamente"
+: $stmt->error
+
+]);
+
+$stmt->close();
+
+mysqli_close($con);
+
+exit;
+
+}
+
+
+/*
+──────────────────────────────
+LISTAR
 GET
 ──────────────────────────────
 */
 
-header("Content-Type: application/json");
+header(
+"Content-Type: application/json"
+);
 
 $sql = "
 
 SELECT
+
 id_certificaciones,
 nombre_certificacion,
 institucion_dada,
@@ -101,32 +439,61 @@ ORDER BY fecha_emitido DESC
 
 ";
 
-$stmt = $con->prepare($sql);
+$stmt =
+$con->prepare(
+$sql
+);
 
 $stmt->bind_param(
-    "i",
-    $id_postulante
+"i",
+$id_postulante
 );
 
 $stmt->execute();
 
-$res = $stmt->get_result();
+$res =
+$stmt->get_result();
 
-$data = [];
+$data =
+[];
 
-while ($fila = $res->fetch_assoc()) {
+while (
+$fila =
+$res->fetch_assoc()
+) {
 
-    $data[] = [
-        "id"=>$fila["id_certificaciones"],
-        "nombre"=>$fila["nombre_certificacion"],
-        "emisor"=>$fila["institucion_dada"],
-        "fecha"=>$fila["fecha_emitido"]
-    ];
+$data[] = [
+
+"id" =>
+$fila[
+"id_certificaciones"
+],
+
+"nombre" =>
+$fila[
+"nombre_certificacion"
+],
+
+"emisor" =>
+$fila[
+"institucion_dada"
+],
+
+"fecha" =>
+$fila[
+"fecha_emitido"
+]
+
+];
+
 }
 
 echo json_encode([
-    "ok"=>true,
-    "certificaciones"=>$data
+
+"ok"=>true,
+
+"certificaciones"=>$data
+
 ]);
 
 $stmt->close();
