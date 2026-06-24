@@ -1,8 +1,8 @@
-<?php
+﻿<?php
 
 function registrarPostulante($con, $nombres, $correo, $password, $telefono) {
 
-    // 🔐 Verificar si ya existe el correo en usuarios
+    // ðŸ” Verificar si ya existe el correo en usuarios
     $check = $con->prepare("SELECT id_usuario FROM usuarios WHERE correo = ?");
     $check->bind_param("s", $correo);
     $check->execute();
@@ -17,32 +17,34 @@ function registrarPostulante($con, $nombres, $correo, $password, $telefono) {
     }
     $check->close();
 
-    // 🔐 Hash de contraseña (se guarda ya hasheada dentro del token)
+    // ðŸ” Hash de contraseÃ±a (se guarda ya hasheada dentro del token)
     $hash = password_hash($password, PASSWORD_BCRYPT);
 
-    // 🔐 Borrar cualquier registro pendiente anterior con este correo
-    //     (por si el usuario intentó registrarse antes y no verificó)
+    // ðŸ” Borrar cualquier registro pendiente anterior con este correo
+    //     (por si el usuario intentÃ³ registrarse antes y no verificÃ³)
     $stmtDel = $con->prepare("DELETE FROM tokens WHERE tipo = 'registro_pendiente' AND JSON_UNQUOTE(JSON_EXTRACT(token, '$.correo')) = ?");
     $stmtDel->bind_param("s", $correo);
     $stmtDel->execute();
     $stmtDel->close();
 
-    // 🔐 Generar código de verificación de 6 dígitos
+    // ðŸ” Generar cÃ³digo de verificaciÃ³n de 6 dÃ­gitos
     $codigo = sprintf('%06d', random_int(0, 999999));
 
-    // 🔐 Armar el payload con todos los datos del registro + el código
+    // ðŸ” Armar el payload con todos los datos del registro + el cÃ³digo
     $payload = json_encode([
         "codigo"   => $codigo,
         "nombres"  => $nombres,
         "correo"   => $correo,
         "password" => $hash,
         "telefono" => $telefono,
+        "id_rol"   => 2,
+        "tipo_usuario" => "postulante",
     ]);
 
     $tiempo_expira = date('Y-m-d H:i:s', strtotime('+15 minutes'));
     $tipo = 'registro_pendiente';
 
-    // 🔐 Insertar en tokens con id_usuario = NULL (aún no existe el usuario)
+    // ðŸ” Insertar en tokens con id_usuario = NULL (aÃºn no existe el usuario)
     $stmt = $con->prepare("
         INSERT INTO tokens (token, tipo, tiempo_expira, id_usuario)
         VALUES (?, ?, ?, NULL)
@@ -53,7 +55,7 @@ function registrarPostulante($con, $nombres, $correo, $password, $telefono) {
         $stmt->close();
         return [
             "success" => false,
-            "message" => "Error al generar el código de verificación"
+            "message" => "Error al generar el cÃ³digo de verificaciÃ³n"
         ];
     }
     $stmt->close();
@@ -62,7 +64,8 @@ function registrarPostulante($con, $nombres, $correo, $password, $telefono) {
         "success" => true,
         "correo"  => $correo,
         "codigo"  => $codigo,   // el frontend lo usa para enviarlo por EmailJS
-        "message" => "Código de verificación generado correctamente"
+        "message" => "CÃ³digo de verificaciÃ³n generado correctamente"
     ];
 }
 ?>
+

@@ -1,69 +1,66 @@
-<?php
+﻿<?php
 
-// función para registrar un reclutador
 function registrarReclutador($con, $nombres, $correo, $password, $telefono) {
 
-    // 🔐 Verificar si ya existe el correo
-    $check = $con->prepare("
-        SELECT id_usuario 
-        FROM usuarios 
-        WHERE correo = ?
-    ");
-
+    // Verificar si ya existe el correo en usuarios.
+    $check = $con->prepare("SELECT id_usuario FROM usuarios WHERE correo = ?");
     $check->bind_param("s", $correo);
     $check->execute();
     $check->store_result();
 
     if ($check->num_rows > 0) {
-
+        $check->close();
         return [
             "success" => false,
             "message" => "Datos ya existentes"
         ];
     }
+    $check->close();
 
-    // 🔐 Hash de contraseña
+    // La cuenta real se crea hasta que el usuario valida el codigo por correo.
     $hash = password_hash($password, PASSWORD_BCRYPT);
-    $id_rol = 3; // reclutador
 
-    // 🔐 Insert en usuarios
+    // Borrar cualquier registro pendiente anterior con este correo.
+    $stmtDel = $con->prepare("DELETE FROM tokens WHERE tipo = 'registro_pendiente' AND JSON_UNQUOTE(JSON_EXTRACT(token, '$.correo')) = ?");
+    $stmtDel->bind_param("s", $correo);
+    $stmtDel->execute();
+    $stmtDel->close();
+
+    $codigo = sprintf('%06d', random_int(0, 999999));
+
+    $payload = json_encode([
+        "codigo"       => $codigo,
+        "nombres"      => $nombres,
+        "correo"       => $correo,
+        "password"     => $hash,
+        "telefono"     => $telefono,
+        "id_rol"       => 3,
+        "tipo_usuario" => "reclutador"
+    ]);
+
+    $tiempo_expira = date('Y-m-d H:i:s', strtotime('+15 minutes'));
+    $tipo = 'registro_pendiente';
+
     $stmt = $con->prepare("
-        INSERT INTO usuarios (nombres, correo, contraseña, telefono, id_rol)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO tokens (token, tipo, tiempo_expira, id_usuario)
+        VALUES (?, ?, ?, NULL)
     ");
-
-    $stmt->bind_param("ssssi", $nombres, $correo, $hash, $telefono, $id_rol);
+    $stmt->bind_param("sss", $payload, $tipo, $tiempo_expira);
 
     if (!$stmt->execute()) {
-
+        $stmt->close();
         return [
             "success" => false,
-            "message" => "Error al crear usuario"
+            "message" => "Error al generar el codigo de verificacion"
         ];
     }
-
-    $id_usuario = $stmt->insert_id;
-
-    // 🔐 Insert en reclutadores (id_empresas NULL por defecto)
-    $stmt2 = $con->prepare("
-        INSERT INTO reclutadores (id_usuario)
-        VALUES (?)
-    ");
-
-    $stmt2->bind_param("i", $id_usuario);
-
-    if (!$stmt2->execute()) {
-
-        return [
-            "success" => false,
-            "message" => "Error al crear reclutador"
-        ];
-    }
+    $stmt->close();
 
     return [
         "success" => true,
-        "id_usuario" => $id_usuario,
-        "message" => "Reclutador registrado correctamente"
+        "correo"  => $correo,
+        "codigo"  => $codigo,
+        "message" => "Codigo de verificacion generado correctamente"
     ];
 }
 

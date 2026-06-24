@@ -72,7 +72,7 @@ if (empty($correo) || empty($password)) {
     exit;
 }
 
-if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+if (false && !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     echo json_encode(["success" => false, "message" => "Credenciales inválidas"]);
     exit;
 }
@@ -117,12 +117,25 @@ $user = mysqli_fetch_assoc($res);
 /* =========================
    VALIDACIÓN LOGIN (ANTI ENUMERACIÓN)
 ========================= */
-if (!$user || !password_verify($password, $user["contraseña"])) {
+$passwordHash = (string)($user["contraseña"] ?? "");
+$passwordOk = $user && password_verify($password, $passwordHash);
+$legacyPasswordOk = $user && !$passwordOk && hash_equals($passwordHash, (string)$password);
+
+if (!$user || (!$passwordOk && !$legacyPasswordOk)) {
     echo json_encode([
         "success" => false,
         "message" => "Credenciales inválidas"
     ]);
     exit;
+}
+
+if ($legacyPasswordOk) {
+    $nuevoHash = password_hash($password, PASSWORD_BCRYPT);
+    $stmtHash = mysqli_prepare($conn, "UPDATE usuarios SET contraseña = ? WHERE id_usuario = ?");
+    if ($stmtHash) {
+        mysqli_stmt_bind_param($stmtHash, "si", $nuevoHash, $user["id_usuario"]);
+        mysqli_stmt_execute($stmtHash);
+    }
 }
 
 /* =========================
