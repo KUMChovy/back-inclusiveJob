@@ -1,4 +1,28 @@
-<?php 
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| API DE SESION - login.php
+|--------------------------------------------------------------------------
+| Este endpoint inicia la sesion PHP del usuario.
+|
+| Flujo principal:
+| 1. Configura la cookie de sesion con httponly, secure y samesite.
+| 2. Responde el preflight OPTIONS usado por CORS.
+| 3. Acepta solo POST con JSON: { correo, password }.
+| 4. Busca el usuario por correo y obtiene su rol desde la tabla rol.
+| 5. Verifica la password con password_verify.
+| 6. Si detecta una password legacy en texto plano, la migra a hash bcrypt.
+| 7. Bloquea cuentas desactivadas o correos no verificados.
+| 8. Regenera el ID de sesion para evitar fijacion de sesion.
+| 9. Guarda los datos minimos en $_SESSION["user"].
+| 10. Devuelve JSON para que el front consulte sesion.php y normalice el usuario.
+|
+| Respuestas importantes:
+| - success=false + message: el front muestra ese mensaje al usuario.
+| - requiere_verificacion=true: el usuario existe, pero aun debe verificar correo.
+*/
+
 /* =========================
    SESIÓN SEGURA
 ========================= */
@@ -83,7 +107,7 @@ if (strlen($correo) > 100 || strlen($password) > 128) {
 }
 
 /* =========================
-   CONSULTA SEGURA
+   CONSULTA
 ========================= */
 $sql = "SELECT 
             u.id_usuario,

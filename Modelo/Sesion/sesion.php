@@ -1,4 +1,29 @@
 <?php
+
+/*
+|--------------------------------------------------------------------------
+| API DE SESION - sesion.php
+|--------------------------------------------------------------------------
+| Este endpoint mantiene, consulta y destruye la sesion PHP.
+|
+| Usos desde el front:
+| - GET sesion.php: devuelve { auth, user } si hay sesion activa.
+| - POST sesion.php?accion=logout: destruye la sesion y borra la cookie.
+|
+| Flujo en GET:
+| 1. Configura la cookie y headers CORS con credenciales.
+| 2. Si no existe $_SESSION["user"], responde auth=false.
+| 3. Valida timeout de inactividad.
+| 4. Consulta la base de datos para refrescar nombre, rol, correo y foto.
+| 5. Actualiza $_SESSION["user"] con datos completos y devuelve el usuario.
+|
+| Flujo en logout:
+| 1. Limpia $_SESSION.
+| 2. Borra la cookie PHPSESSID usando los parametros actuales.
+| 3. Ejecuta session_destroy().
+| 4. Devuelve success=true para que el front redirija al login.
+*/
+
 session_set_cookie_params([
     "httponly" => true,
     "secure" => false,
@@ -78,7 +103,7 @@ $inactiveTime = time() - $_SESSION["last_activity"];
 
 if ($inactiveTime > $_SESSION["session_timeout"]) {
 
-    // limpiar sesiÃ³n completamente
+    // limpiar sesion completamente
     $_SESSION = [];
 
     if (ini_get("session.use_cookies")) {
@@ -102,7 +127,7 @@ if ($inactiveTime > $_SESSION["session_timeout"]) {
 
 /* =========================
    SOLO AQUÃ se actualiza actividad
-   (IMPORTANTE: despuÃ©s de validar timeout)
+   (IMPORTANTE: despues de validar timeout)
 ========================= */
 
 //$_SESSION["last_activity"] = time();
