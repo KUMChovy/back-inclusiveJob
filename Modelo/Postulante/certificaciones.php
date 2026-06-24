@@ -2,7 +2,8 @@
 
 require_once("../../Conexion.php");
 
-header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Credentials: true");
 header("Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
@@ -16,10 +17,10 @@ $con = conectarbd();
 $id_postulante = 10;
 
 /*
-──────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 VER PDF
 GET ?archivo=1&id=#
-──────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 */
 
 if (
@@ -52,10 +53,10 @@ if (
 }
 
 /*
-──────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ELIMINAR
 DELETE
-──────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 */
 
 if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
@@ -66,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
 
     if (!$id) {
         http_response_code(400);
-        echo json_encode(["ok" => false, "msg" => "ID inválido"]);
+        echo json_encode(["ok" => false, "msg" => "ID invÃ¡lido"]);
         exit;
     }
 
@@ -77,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
 
     echo json_encode([
         "ok"  => $ok,
-        "msg" => $ok ? "Certificación eliminada" : $stmt->error
+        "msg" => $ok ? "CertificaciÃ³n eliminada" : $stmt->error
     ]);
 
     $stmt->close();
@@ -86,10 +87,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
 }
 
 /*
-──────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 CREAR / EDITAR
 POST
-──────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -111,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dt = DateTime::createFromFormat('Y-m-d', $fecha);
     if (!$dt || $dt->format('Y-m-d') !== $fecha) {
         http_response_code(400);
-        echo json_encode(["ok" => false, "msg" => "Fecha inválida"]);
+        echo json_encode(["ok" => false, "msg" => "Fecha invÃ¡lida"]);
         exit;
     }
 
@@ -122,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    /* ── EDITAR ── */
+    /* â”€â”€ EDITAR â”€â”€ */
     if ($id) {
 
         if (isset($_FILES['pdf']) && $_FILES['pdf']['error'] === UPLOAD_ERR_OK) {
@@ -149,7 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->bind_param("sssii", $nombre, $institucion, $fecha, $id, $id_postulante);
         }
 
-    /* ── CREAR ── */
+    /* â”€â”€ CREAR â”€â”€ */
     } else {
 
         if (!isset($_FILES['pdf']) || $_FILES['pdf']['error'] !== UPLOAD_ERR_OK) {
@@ -187,10 +188,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 /*
-──────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 LISTAR
 GET
-──────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 */
 
 header("Content-Type: application/json");

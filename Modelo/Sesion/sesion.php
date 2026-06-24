@@ -1,4 +1,9 @@
 <?php
+session_set_cookie_params([
+    "httponly" => true,
+    "secure" => false,
+    "samesite" => "Strict"
+]);
 
 session_start();
 
@@ -38,7 +43,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && $accion === "logout") {
 }
 
 /* =========================
-   VALIDACIÓN DE SESIÓN
+   VALIDACIÃ“N DE SESIÃ“N
 ========================= */
 
 if (!isset($_SESSION["user"])) {
@@ -49,7 +54,7 @@ if (!isset($_SESSION["user"])) {
 }
 
 /* =========================
-   CONFIGURACIÓN DE TIMEOUT
+   CONFIGURACIÃ“N DE TIMEOUT
    (solo se define una vez)
 ========================= */
 
@@ -66,14 +71,14 @@ if (!isset($_SESSION["last_activity"])) {
 }
 
 /* =========================
-   EXPIRACIÓN POR INACTIVIDAD
+   EXPIRACIÃ“N POR INACTIVIDAD
 ========================= */
 
 $inactiveTime = time() - $_SESSION["last_activity"];
 
 if ($inactiveTime > $_SESSION["session_timeout"]) {
 
-    // limpiar sesión completamente
+    // limpiar sesiÃ³n completamente
     $_SESSION = [];
 
     if (ini_get("session.use_cookies")) {
@@ -90,14 +95,14 @@ if ($inactiveTime > $_SESSION["session_timeout"]) {
 
     echo json_encode([
         "auth" => false,
-        "message" => "Sesión expirada"
+        "message" => "SesiÃ³n expirada"
     ]);
     exit;
 }
 
 /* =========================
-   SOLO AQUÍ se actualiza actividad
-   (IMPORTANTE: después de validar timeout)
+   SOLO AQUÃ se actualiza actividad
+   (IMPORTANTE: despuÃ©s de validar timeout)
 ========================= */
 
 //$_SESSION["last_activity"] = time();
