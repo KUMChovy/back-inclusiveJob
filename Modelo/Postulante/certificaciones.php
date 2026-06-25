@@ -13,16 +13,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 $con = conectarbd();
-
 $id_postulante = 10;
 
-/*
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-VER PDF
-GET ?archivo=1&id=#
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-*/
-
+/* VER PDF - GET ?archivo=1&id=# */
 if (
     $_SERVER['REQUEST_METHOD'] === 'GET'
     && isset($_GET['archivo'])
@@ -52,13 +45,7 @@ if (
     exit;
 }
 
-/*
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-ELIMINAR
-DELETE
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-*/
-
+/* ELIMINAR - DELETE */
 if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
     header("Content-Type: application/json");
 
@@ -67,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
 
     if (!$id) {
         http_response_code(400);
-        echo json_encode(["ok" => false, "msg" => "ID invÃ¡lido"]);
+        echo json_encode(["ok" => false, "msg" => "ID invalido"]);
         exit;
     }
 
@@ -78,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
 
     echo json_encode([
         "ok"  => $ok,
-        "msg" => $ok ? "CertificaciÃ³n eliminada" : $stmt->error
+        "msg" => $ok ? "Certificacion eliminada" : $stmt->error
     ]);
 
     $stmt->close();
@@ -86,13 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
     exit;
 }
 
-/*
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-CREAR / EDITAR
-POST
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-*/
-
+/* CREAR / EDITAR - POST */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header("Content-Type: application/json");
 
@@ -101,33 +82,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fecha       = trim($_POST['fecha_emitido']        ?? '');
     $id          = isset($_POST['id']) ? intval($_POST['id']) : null;
 
-    // Validar campos obligatorios
     if (!$nombre || !$institucion || !$fecha) {
         http_response_code(400);
         echo json_encode(["ok" => false, "msg" => "Campos incompletos"]);
         exit;
     }
 
-    // Validar formato de fecha
     $dt = DateTime::createFromFormat('Y-m-d', $fecha);
     if (!$dt || $dt->format('Y-m-d') !== $fecha) {
         http_response_code(400);
-        echo json_encode(["ok" => false, "msg" => "Fecha invÃ¡lida"]);
+        echo json_encode(["ok" => false, "msg" => "Fecha invalida"]);
         exit;
     }
 
-    // Validar que no sea fecha futura
     if ($dt > new DateTime()) {
         http_response_code(400);
         echo json_encode(["ok" => false, "msg" => "La fecha no puede ser futura"]);
         exit;
     }
 
-    /* â”€â”€ EDITAR â”€â”€ */
     if ($id) {
-
         if (isset($_FILES['pdf']) && $_FILES['pdf']['error'] === UPLOAD_ERR_OK) {
-
             $mime = mime_content_type($_FILES['pdf']['tmp_name']);
             if ($mime !== 'application/pdf') {
                 http_response_code(415);
@@ -142,17 +117,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $null = null;
             $stmt->bind_param("ssbsii", $nombre, $institucion, $null, $fecha, $id, $id_postulante);
             $stmt->send_long_data(2, $pdf);
-
         } else {
-
             $sql  = "UPDATE certificaciones SET nombre_certificacion=?, institucion_dada=?, fecha_emitido=? WHERE id_certificaciones=? AND id_postulante=?";
             $stmt = $con->prepare($sql);
             $stmt->bind_param("sssii", $nombre, $institucion, $fecha, $id, $id_postulante);
         }
-
-    /* â”€â”€ CREAR â”€â”€ */
     } else {
-
         if (!isset($_FILES['pdf']) || $_FILES['pdf']['error'] !== UPLOAD_ERR_OK) {
             http_response_code(400);
             echo json_encode(["ok" => false, "msg" => "Selecciona PDF"]);
@@ -187,13 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-/*
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-LISTAR
-GET
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-*/
-
+/* LISTAR - GET */
 header("Content-Type: application/json");
 
 $sql  = "SELECT id_certificaciones, nombre_certificacion, institucion_dada, fecha_emitido FROM certificaciones WHERE id_postulante=? ORDER BY fecha_emitido DESC";

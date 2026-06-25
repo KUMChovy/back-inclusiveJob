@@ -1,9 +1,20 @@
-﻿<?php
+<?php
+
+if (!function_exists('prepararConsulta')) {
+    function prepararConsulta($con, string $sql) {
+        $stmt = $con->prepare($sql);
+
+        if (!$stmt) {
+            throw new Exception("Error al preparar consulta: " . $con->error);
+        }
+
+        return $stmt;
+    }
+}
 
 function registrarReclutador($con, $nombres, $correo, $password, $telefono) {
-
-    // Verificar si ya existe el correo en usuarios.
-    $check = $con->prepare("SELECT id_usuario FROM usuarios WHERE correo = ?");
+    // Verifica si el correo ya existe en usuarios.
+    $check = prepararConsulta($con, "SELECT id_usuario FROM usuarios WHERE correo = ?");
     $check->bind_param("s", $correo);
     $check->execute();
     $check->store_result();
@@ -20,8 +31,8 @@ function registrarReclutador($con, $nombres, $correo, $password, $telefono) {
     // La cuenta real se crea hasta que el usuario valida el codigo por correo.
     $hash = password_hash($password, PASSWORD_BCRYPT);
 
-    // Borrar cualquier registro pendiente anterior con este correo.
-    $stmtDel = $con->prepare("DELETE FROM tokens WHERE tipo = 'registro_pendiente' AND JSON_UNQUOTE(JSON_EXTRACT(token, '$.correo')) = ?");
+    // Borra cualquier registro pendiente anterior con este correo.
+    $stmtDel = prepararConsulta($con, "DELETE FROM tokens WHERE tipo = 'registro_pendiente' AND JSON_UNQUOTE(JSON_EXTRACT(token, '$.correo')) = ?");
     $stmtDel->bind_param("s", $correo);
     $stmtDel->execute();
     $stmtDel->close();
@@ -41,7 +52,7 @@ function registrarReclutador($con, $nombres, $correo, $password, $telefono) {
     $tiempo_expira = date('Y-m-d H:i:s', strtotime('+15 minutes'));
     $tipo = 'registro_pendiente';
 
-    $stmt = $con->prepare("
+    $stmt = prepararConsulta($con, "
         INSERT INTO tokens (token, tipo, tiempo_expira, id_usuario)
         VALUES (?, ?, ?, NULL)
     ");
@@ -63,5 +74,4 @@ function registrarReclutador($con, $nombres, $correo, $password, $telefono) {
         "message" => "Codigo de verificacion generado correctamente"
     ];
 }
-
 ?>

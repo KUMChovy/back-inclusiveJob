@@ -68,7 +68,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && $accion === "logout") {
 }
 
 /* =========================
-   VALIDACIÃ“N DE SESIÃ“N
+   VALIDACION DE SESION
 ========================= */
 
 if (!isset($_SESSION["user"])) {
@@ -79,7 +79,7 @@ if (!isset($_SESSION["user"])) {
 }
 
 /* =========================
-   CONFIGURACIÃ“N DE TIMEOUT
+   CONFIGURACION DE TIMEOUT
    (solo se define una vez)
 ========================= */
 
@@ -96,7 +96,7 @@ if (!isset($_SESSION["last_activity"])) {
 }
 
 /* =========================
-   EXPIRACIÃ“N POR INACTIVIDAD
+   EXPIRACION POR INACTIVIDAD
 ========================= */
 
 $inactiveTime = time() - $_SESSION["last_activity"];
@@ -120,13 +120,13 @@ if ($inactiveTime > $_SESSION["session_timeout"]) {
 
     echo json_encode([
         "auth" => false,
-        "message" => "SesiÃ³n expirada"
+        "message" => "Sesion expirada"
     ]);
     exit;
 }
 
 /* =========================
-   SOLO AQUÃ se actualiza actividad
+   SOLO AQUI se actualiza actividad
    (IMPORTANTE: despues de validar timeout)
 ========================= */
 

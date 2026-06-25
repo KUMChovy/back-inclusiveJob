@@ -77,7 +77,7 @@ if ($habilidades === "") {
     exit;
 }
 
-require_once "../../conexion.php";
+require_once __DIR__ . "/../../Conexion.php";
 $con = conectarbd();
 mysqli_set_charset($con, "utf8mb4");
 

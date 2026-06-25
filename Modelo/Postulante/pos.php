@@ -1,9 +1,20 @@
-﻿<?php
+<?php
+
+if (!function_exists('prepararConsulta')) {
+    function prepararConsulta($con, string $sql) {
+        $stmt = $con->prepare($sql);
+
+        if (!$stmt) {
+            throw new Exception("Error al preparar consulta: " . $con->error);
+        }
+
+        return $stmt;
+    }
+}
 
 function registrarPostulante($con, $nombres, $correo, $password, $telefono) {
-
-    // ðŸ” Verificar si ya existe el correo en usuarios
-    $check = $con->prepare("SELECT id_usuario FROM usuarios WHERE correo = ?");
+    // Verifica si el correo ya existe en usuarios.
+    $check = prepararConsulta($con, "SELECT id_usuario FROM usuarios WHERE correo = ?");
     $check->bind_param("s", $correo);
     $check->execute();
     $check->store_result();
@@ -17,35 +28,31 @@ function registrarPostulante($con, $nombres, $correo, $password, $telefono) {
     }
     $check->close();
 
-    // ðŸ” Hash de contraseÃ±a (se guarda ya hasheada dentro del token)
+    // La cuenta real se crea hasta que el usuario valida el codigo por correo.
     $hash = password_hash($password, PASSWORD_BCRYPT);
 
-    // ðŸ” Borrar cualquier registro pendiente anterior con este correo
-    //     (por si el usuario intentÃ³ registrarse antes y no verificÃ³)
-    $stmtDel = $con->prepare("DELETE FROM tokens WHERE tipo = 'registro_pendiente' AND JSON_UNQUOTE(JSON_EXTRACT(token, '$.correo')) = ?");
+    // Borra cualquier registro pendiente anterior con este correo.
+    $stmtDel = prepararConsulta($con, "DELETE FROM tokens WHERE tipo = 'registro_pendiente' AND JSON_UNQUOTE(JSON_EXTRACT(token, '$.correo')) = ?");
     $stmtDel->bind_param("s", $correo);
     $stmtDel->execute();
     $stmtDel->close();
 
-    // ðŸ” Generar cÃ³digo de verificaciÃ³n de 6 dÃ­gitos
     $codigo = sprintf('%06d', random_int(0, 999999));
 
-    // ðŸ” Armar el payload con todos los datos del registro + el cÃ³digo
     $payload = json_encode([
-        "codigo"   => $codigo,
-        "nombres"  => $nombres,
-        "correo"   => $correo,
-        "password" => $hash,
-        "telefono" => $telefono,
-        "id_rol"   => 2,
-        "tipo_usuario" => "postulante",
+        "codigo"       => $codigo,
+        "nombres"      => $nombres,
+        "correo"       => $correo,
+        "password"     => $hash,
+        "telefono"     => $telefono,
+        "id_rol"       => 2,
+        "tipo_usuario" => "postulante"
     ]);
 
     $tiempo_expira = date('Y-m-d H:i:s', strtotime('+15 minutes'));
     $tipo = 'registro_pendiente';
 
-    // ðŸ” Insertar en tokens con id_usuario = NULL (aÃºn no existe el usuario)
-    $stmt = $con->prepare("
+    $stmt = prepararConsulta($con, "
         INSERT INTO tokens (token, tipo, tiempo_expira, id_usuario)
         VALUES (?, ?, ?, NULL)
     ");
@@ -55,7 +62,7 @@ function registrarPostulante($con, $nombres, $correo, $password, $telefono) {
         $stmt->close();
         return [
             "success" => false,
-            "message" => "Error al generar el cÃ³digo de verificaciÃ³n"
+            "message" => "Error al generar el codigo de verificacion"
         ];
     }
     $stmt->close();
@@ -63,9 +70,8 @@ function registrarPostulante($con, $nombres, $correo, $password, $telefono) {
     return [
         "success" => true,
         "correo"  => $correo,
-        "codigo"  => $codigo,   // el frontend lo usa para enviarlo por EmailJS
-        "message" => "CÃ³digo de verificaciÃ³n generado correctamente"
+        "codigo"  => $codigo,
+        "message" => "Codigo de verificacion generado correctamente"
     ];
 }
 ?>
-

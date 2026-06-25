@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-require_once __DIR__ . "/../../conexion.php";
+require_once __DIR__ . "/../../Conexion.php";
 require_once __DIR__ . "/reclu.php";
 
 try {
@@ -94,7 +94,7 @@ try {
 
         echo json_encode([
             "success" => false,
-            "message" => "Demasiados intentos, intenta mÃ¡s tarde"
+            "message" => "Demasiados intentos, intenta mas tarde"
         ]);
 
         exit;
@@ -117,7 +117,7 @@ try {
 
         echo json_encode([
             "success" => false,
-            "message" => "Contenido invÃ¡lido"
+            "message" => "Contenido invalido"
         ]);
 
         exit;
@@ -136,7 +136,7 @@ try {
 
         echo json_encode([
             "success" => false,
-            "message" => "Solicitud vacÃ­a"
+            "message" => "Solicitud vacia"
         ]);
 
         exit;
@@ -153,7 +153,7 @@ try {
 
         echo json_encode([
             "success" => false,
-            "message" => "JSON invÃ¡lido"
+            "message" => "JSON invalido"
         ]);
 
         exit;
@@ -188,59 +188,59 @@ try {
 
     /*
     |--------------------------------------------------------------------------
-    | ValidaciÃ³n de longitud
+    | Validacion de longitud
     |--------------------------------------------------------------------------
     */
     if (strlen($nombres) < 3 || strlen($nombres) > 60) {
         http_response_code(400);
-        echo json_encode(["success" => false, "message" => "Datos invÃ¡lidos"]);
+        echo json_encode(["success" => false, "message" => "Datos invalidos"]);
         exit;
     }
 
     if (strlen($correo) > 100) {
         http_response_code(400);
-        echo json_encode(["success" => false, "message" => "Datos invÃ¡lidos"]);
+        echo json_encode(["success" => false, "message" => "Datos invalidos"]);
         exit;
     }
 
     if (strlen($password) < 8 || strlen($password) > 128) {
         http_response_code(400);
-        echo json_encode(["success" => false, "message" => "Datos invÃ¡lidos"]);
+        echo json_encode(["success" => false, "message" => "Datos invalidos"]);
         exit;
     }
 
     if (strlen($telefono) < 7 || strlen($telefono) > 15) {
         http_response_code(400);
-        echo json_encode(["success" => false, "message" => "Datos invÃ¡lidos"]);
+        echo json_encode(["success" => false, "message" => "Datos invalidos"]);
         exit;
     }
 
     /*
     |--------------------------------------------------------------------------
-    | ValidaciÃ³n de formato
+    | Validacion de formato
     |--------------------------------------------------------------------------
     */
     if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         http_response_code(400);
-        echo json_encode(["success" => false, "message" => "Datos invÃ¡lidos"]);
+        echo json_encode(["success" => false, "message" => "Datos invalidos"]);
         exit;
     }
 
-    if (!preg_match('/^[a-zA-ZÃÃ‰ÃÃ“ÃšÃ¡Ã©Ã­Ã³ÃºÃ‘Ã± ]{3,60}$/u', $nombres)) {
+    if (!preg_match("/^[\\p{L}\\s.-]{3,60}$/u", $nombres)) {
         http_response_code(400);
-        echo json_encode(["success" => false, "message" => "Datos invÃ¡lidos"]);
+        echo json_encode(["success" => false, "message" => "Datos invalidos"]);
         exit;
     }
 
     if (!preg_match('/^[0-9]{7,15}$/', $telefono)) {
         http_response_code(400);
-        echo json_encode(["success" => false, "message" => "Datos invÃ¡lidos"]);
+        echo json_encode(["success" => false, "message" => "Datos invalidos"]);
         exit;
     }
 
     /*
     |--------------------------------------------------------------------------
-    | PolÃ­tica de contraseÃ±a
+    | Politica de contrasena
     |--------------------------------------------------------------------------
     */
     if (
@@ -254,7 +254,7 @@ try {
 
         echo json_encode([
             "success" => false,
-            "message" => "Datos invÃ¡lidos"
+            "message" => "Datos invalidos"
         ]);
 
         exit;
@@ -262,7 +262,7 @@ try {
 
     /*
     |--------------------------------------------------------------------------
-    | ConexiÃ³n BD
+    | Conexion BD
     |--------------------------------------------------------------------------
     */
     $con = conectarbd();

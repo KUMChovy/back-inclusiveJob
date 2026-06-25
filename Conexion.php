@@ -1,11 +1,14 @@
 <?php
 
-function conectarbd(){
+function conectarbd() {
     $con = mysqli_connect("localhost", "root", "", "inclusijob");
 
-    if(!$con){
-        die("Error de conexión: " . mysqli_connect_error());
+    if (!$con) {
+        die("Error de conexion: " . mysqli_connect_error());
     }
+
+    mysqli_set_charset($con, "utf8mb4");
 
     return $con;
 }
+?>
