@@ -2,7 +2,7 @@
 header("Content-Type: application/json; charset=utf-8");
 header("Access-Control-Allow-Origin: http://localhost:5173");
 header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
 if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
@@ -18,7 +18,7 @@ session_set_cookie_params([
 
 session_start();
 
-if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+if (!in_array($_SERVER["REQUEST_METHOD"], ["GET", "POST"], true)) {
     http_response_code(405);
     echo json_encode(["success" => false, "mensaje" => "Metodo no permitido."]);
     exit;
@@ -42,6 +42,64 @@ if ($id_usuario <= 0) {
 if ($id_usuario_front > 0 && $id_usuario_front !== $id_usuario) {
     http_response_code(403);
     echo json_encode(["success" => false, "mensaje" => "No puedes modificar el perfil de otro usuario."]);
+    exit;
+}
+
+require_once __DIR__ . "/../../Conexion.php";
+$con = conectarbd();
+mysqli_set_charset($con, "utf8mb4");
+
+$stmtUsuario = mysqli_prepare($con, "SELECT id_rol FROM usuarios WHERE id_usuario = ? AND estado = 1 LIMIT 1");
+mysqli_stmt_bind_param($stmtUsuario, "i", $id_usuario);
+mysqli_stmt_execute($stmtUsuario);
+$resUsuario = mysqli_stmt_get_result($stmtUsuario);
+$usuarioDb = mysqli_fetch_assoc($resUsuario);
+mysqli_stmt_close($stmtUsuario);
+
+if (!$usuarioDb || (int)$usuarioDb["id_rol"] !== 2) {
+    mysqli_close($con);
+    http_response_code(403);
+    echo json_encode(["success" => false, "mensaje" => "Solo los postulantes pueden usar este formulario."]);
+    exit;
+}
+
+if ($_SERVER["REQUEST_METHOD"] === "GET") {
+    $stmtCheck = mysqli_prepare($con,
+        "SELECT
+            p.id_postulante,
+            p.descripcion_discapacidad,
+            p.esfuerzo_fisico_posible,
+            p.experiencia,
+            p.habilidades,
+            pd.id_tipo_discapacidad
+         FROM postulantes p
+         LEFT JOIN postulante_discapacidad pd ON pd.id_postulante = p.id_postulante
+         WHERE p.id_usuario = ?
+         LIMIT 1"
+    );
+    mysqli_stmt_bind_param($stmtCheck, "i", $id_usuario);
+    mysqli_stmt_execute($stmtCheck);
+    $resCheck = mysqli_stmt_get_result($stmtCheck);
+    $postulante = mysqli_fetch_assoc($resCheck);
+    mysqli_stmt_close($stmtCheck);
+    mysqli_close($con);
+
+    $completado = false;
+    if ($postulante) {
+        $completado =
+            trim((string)($postulante["descripcion_discapacidad"] ?? "")) !== "" &&
+            trim((string)($postulante["experiencia"] ?? "")) !== "" &&
+            trim((string)($postulante["habilidades"] ?? "")) !== "" &&
+            $postulante["esfuerzo_fisico_posible"] !== null;
+
+    }
+
+    echo json_encode([
+        "success" => true,
+        "completado" => $completado,
+        "requiere_formulario" => !$completado,
+        "id_postulante" => $postulante ? (int)$postulante["id_postulante"] : null
+    ]);
     exit;
 }
 
@@ -74,24 +132,6 @@ if ($experiencia === "") {
 
 if ($habilidades === "") {
     echo json_encode(["success" => false, "mensaje" => "Las habilidades son requeridas."]);
-    exit;
-}
-
-require_once __DIR__ . "/../../Conexion.php";
-$con = conectarbd();
-mysqli_set_charset($con, "utf8mb4");
-
-$stmtUsuario = mysqli_prepare($con, "SELECT id_rol FROM usuarios WHERE id_usuario = ? AND estado = 1 LIMIT 1");
-mysqli_stmt_bind_param($stmtUsuario, "i", $id_usuario);
-mysqli_stmt_execute($stmtUsuario);
-$resUsuario = mysqli_stmt_get_result($stmtUsuario);
-$usuarioDb = mysqli_fetch_assoc($resUsuario);
-mysqli_stmt_close($stmtUsuario);
-
-if (!$usuarioDb || (int)$usuarioDb["id_rol"] !== 2) {
-    mysqli_close($con);
-    http_response_code(403);
-    echo json_encode(["success" => false, "mensaje" => "Solo los postulantes pueden guardar este formulario."]);
     exit;
 }
 
@@ -206,3 +246,4 @@ echo json_encode([
     "mensaje" => "Perfil guardado correctamente.",
     "id_postulante" => $id_postulante
 ]);
+?>
