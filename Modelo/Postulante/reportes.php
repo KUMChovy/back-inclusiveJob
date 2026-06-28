@@ -1,5 +1,14 @@
 <?php
 
+session_set_cookie_params([
+    "httponly"  => true,
+    "secure"    => false,
+    "samesite"  => "Strict"
+]);
+
+session_start();
+
+
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: http://localhost:5173");
 header("Access-Control-Allow-Credentials: true");
@@ -15,8 +24,12 @@ require_once("../../Conexion.php");
 
 $con = conectarbd();
 
-/* Cambiar luego con sesión */
-$id_usuario = 4;
+if (!isset($_SESSION["user"]["id"])) {
+    echo json_encode(["debug" => "no_session"]);
+    exit;
+}
+
+$id_usuario = (int)$_SESSION["user"]["id"];
 
 /* ─────────────────────────────────────
   ACCIÓN (LISTAR O ELIMINAR)
