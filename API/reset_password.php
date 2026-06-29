@@ -81,14 +81,14 @@ if (!mysqli_stmt_execute($update)) {
 }
 
 // Verificar si realmente se actualizó
-$filas = mysqli_affected_rows($conn);
+// $filas = mysqli_affected_rows($conn);
 
-echo "<pre>";
-echo "ID Usuario: " . $tokenData['id_usuario'] . "\n";
-echo "Filas afectadas: " . $filas . "\n";
-echo "Hash generado: " . $hash . "\n";
-echo "</pre>";
-exit;
+// echo "<pre>";
+// echo "ID Usuario: " . $tokenData['id_usuario'] . "\n";
+// echo "Filas afectadas: " . $filas . "\n";
+// echo "Hash generado: " . $hash . "\n";
+// echo "</pre>";
+// exit;
 
 // Marcar token como usado
 
