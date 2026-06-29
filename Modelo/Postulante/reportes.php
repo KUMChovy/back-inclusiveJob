@@ -178,6 +178,40 @@ if ($method === 'PUT') {
   $stmt->close();
 }
 
+/* ─────────────────────────────────────────
+   CREAR REPORTE (POST)
+───────────────────────────────────────── */
+if ($method === 'POST') {
+    $data       = json_decode(file_get_contents("php://input"), true);
+    $id_vacante = isset($data["id_vacante"]) ? (int)$data["id_vacante"] : 0;
+    $motivo     = isset($data["motivo"])     ? trim($data["motivo"])     : "";
+
+    if (!$id_vacante || $motivo === "") {
+        echo json_encode(["ok" => false, "msg" => "Faltan datos requeridos."]);
+        exit;
+    }
+
+    // Evitar reporte duplicado
+    $stmtDup = $con->prepare("SELECT id_reporte FROM reporte_vacante WHERE id_vacante = ? AND id_usuario = ? LIMIT 1");
+    $stmtDup->bind_param("ii", $id_vacante, $id_usuario);
+    $stmtDup->execute();
+    $stmtDup->store_result();
+    if ($stmtDup->num_rows > 0) {
+        echo json_encode(["ok" => false, "msg" => "Ya reportaste esta vacante."]);
+        $stmtDup->close();
+        exit;
+    }
+    $stmtDup->close();
+
+    $stmtIns = $con->prepare("INSERT INTO reporte_vacante (id_vacante, id_usuario, motivo) VALUES (?, ?, ?)");
+    $stmtIns->bind_param("iis", $id_vacante, $id_usuario, $motivo);
+    $ok = $stmtIns->execute();
+    $stmtIns->close();
+
+    echo json_encode(["ok" => $ok, "msg" => $ok ? "Reporte enviado." : "Error al guardar."]);
+    exit;
+}
+
 mysqli_close($con);
 
 ?>
