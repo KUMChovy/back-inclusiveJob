@@ -11,35 +11,37 @@ require_once("../../Conexion.php");
 $con = conectarbd();
 
 /* temporal */
-$id_usuario = 3;
+$id_usuario = 7;
 
 $sql = "
 
 SELECT
+    rv.id_reporte,
+    rv.motivo,
+    rv.fecha_reporte,
 
-r.id_reporte,
-r.motivo,
-r.fecha_reporte,
+    v.id_vacante,
+    v.titulo_puesto,
+    v.fecha_publicacion,
 
-v.id_vacante,
-v.titulo_puesto,
-v.fecha_publicacion,
+    u.nombres,
+    u.apellidos,
+    u.correo
 
-u.nombres,
-u.apellidos,
-u.correo
-
-FROM reporte_vacante r
+FROM reporte_vacante rv
 
 INNER JOIN vacantes v
-ON r.id_vacante = v.id_vacante
+ON rv.id_vacante = v.id_vacante
+
+INNER JOIN reclutadores r
+ON v.id_reclutador = r.id_reclutador
 
 INNER JOIN usuarios u
-ON r.id_usuario = u.id_usuario
+ON rv.id_usuario = u.id_usuario
 
 WHERE r.id_usuario = ?
 
-ORDER BY r.fecha_reporte DESC
+ORDER BY rv.fecha_reporte DESC
 
 ";
 
@@ -64,7 +66,7 @@ while ($fila = $resultado->fetch_assoc()) {
         "vacante" => $fila["titulo_puesto"],
         "fecha_publicacion" => $fila["fecha_publicacion"],
 
-        // 👇 ESTO ES LO QUE TE FALTABA PARA TU FRONTEND
+        
         "usuario_nombre" => $fila["nombres"] . " " . $fila["apellidos"],
         "correo" => $fila["correo"]
     ];
