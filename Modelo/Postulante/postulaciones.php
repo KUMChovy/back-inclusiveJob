@@ -224,6 +224,40 @@ exit;
 
 }
 
+// CREAR POSTULACIÓN
+// ───────────────────────────────────────────
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+
+    $body       = json_decode(file_get_contents("php://input"), true);
+    $id_vacante = isset($body["id_vacante"]) ? (int)$body["id_vacante"] : 0;
+
+    if (!$id_vacante) {
+        echo json_encode(["ok" => false, "msg" => "ID de vacante requerido."]);
+        exit;
+    }
+
+    // Verificar que no esté ya postulado
+    $stmtDup = $con->prepare("SELECT id_postulacion FROM postulaciones WHERE id_postulante = ? AND id_vacante = ? LIMIT 1");
+    $stmtDup->bind_param("ii", $id_postulante, $id_vacante);
+    $stmtDup->execute();
+    $stmtDup->store_result();
+
+    if ($stmtDup->num_rows > 0) {
+        echo json_encode(["ok" => false, "msg" => "Ya te postulaste a esta vacante."]);
+        $stmtDup->close();
+        exit;
+    }
+    $stmtDup->close();
+
+    $stmtIns = $con->prepare("INSERT INTO postulaciones (id_postulante, id_vacante, estado) VALUES (?, ?, 'pendiente')");
+    $stmtIns->bind_param("ii", $id_postulante, $id_vacante);
+    $ok = $stmtIns->execute();
+    $stmtIns->close();
+
+    echo json_encode(["ok" => $ok, "msg" => $ok ? "Postulación enviada." : "Error al postularse."]);
+    mysqli_close($con);
+    exit;
+}
 
 echo json_encode([
 
