@@ -50,12 +50,26 @@ p.fecha_postulacion,
 
 v.id_vacante,
 v.titulo_puesto,
-v.modalidad
+v.descripcion_puesto,
+v.requisitos,
+v.modalidad,
+v.salario_min,
+v.salario_max,
+v.fecha_publicacion,
+v.fecha_cierre,
+
+e.nombre_empresas
 
 FROM postulaciones p
 
 INNER JOIN vacantes v
 ON p.id_vacante = v.id_vacante
+
+INNER JOIN reclutadores r
+ON v.id_reclutador = r.id_reclutador
+
+INNER JOIN empresas e
+ON r.id_empresas = e.id_empresas
 
 WHERE p.id_postulante = ?
 
@@ -89,16 +103,40 @@ $postulaciones[] = [
 "id" =>
 $fila["id_postulacion"],
 
+"vacante_id" =>
+$fila["id_vacante"],
+
 "vacante" =>
 $fila["titulo_puesto"],
 
+"empresa" =>
+$fila["nombre_empresas"],
+
+"descripcion_puesto" =>
+$fila["descripcion_puesto"],
+
+"requisitos" =>
+$fila["requisitos"],
+
 "modalidad" =>
 $fila["modalidad"],
+
+"salario_min" =>
+$fila["salario_min"],
+
+"salario_max" =>
+$fila["salario_max"],
 
 "estado" =>
 strtolower(
 $fila["estado"]
 ),
+
+"fecha_publicacion" =>
+$fila["fecha_publicacion"],
+
+"fecha_cierre" =>
+$fila["fecha_cierre"],
 
 "fecha" =>
 $fila["fecha_postulacion"]
