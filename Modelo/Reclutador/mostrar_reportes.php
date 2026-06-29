@@ -66,7 +66,7 @@ while ($fila = $resultado->fetch_assoc()) {
         "vacante" => $fila["titulo_puesto"],
         "fecha_publicacion" => $fila["fecha_publicacion"],
 
-        // 👇 ESTO ES LO QUE TE FALTABA PARA TU FRONTEND
+        
         "usuario_nombre" => $fila["nombres"] . " " . $fila["apellidos"],
         "correo" => $fila["correo"]
     ];
