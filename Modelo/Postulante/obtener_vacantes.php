@@ -67,6 +67,45 @@ if (!$postulante) {
 
 $id_postulante = (int)$postulante["id_postulante"];
 
+//obtener postulacion
+$stmtPost = mysqli_prepare($con,
+"SELECT id_vacante 
+ FROM postulaciones 
+ WHERE id_postulante = ?"
+);
+
+mysqli_stmt_bind_param($stmtPost, "i", $id_postulante);
+mysqli_stmt_execute($stmtPost);
+$resPost = mysqli_stmt_get_result($stmtPost);
+
+$postuladas = [];
+
+while ($row = mysqli_fetch_assoc($resPost)) {
+    $postuladas[(int)$row["id_vacante"]] = true;
+}
+
+mysqli_stmt_close($stmtPost);
+
+
+//obtener reporte
+$stmtRep = mysqli_prepare($con,
+"SELECT id_vacante 
+ FROM reporte_vacante 
+ WHERE id_usuario = ?"
+);
+
+mysqli_stmt_bind_param($stmtRep, "i", $id_usuario);
+mysqli_stmt_execute($stmtRep);
+$resRep = mysqli_stmt_get_result($stmtRep);
+
+$reportadas = [];
+
+while ($row = mysqli_fetch_assoc($resRep)) {
+    $reportadas[(int)$row["id_vacante"]] = true;
+}
+
+mysqli_stmt_close($stmtRep);
+
 // ── 3. Obtener tipos de discapacidad del postulante ──────────
 $stmtD = mysqli_prepare($con,
     "SELECT id_tipo_discapacidad FROM postulante_discapacidad WHERE id_postulante = ?"
@@ -176,6 +215,8 @@ foreach ($vacantes as &$v) {
     $v["id_vacante"]  = $id;
     $v["salario_min"] = (float)$v["salario_min"];
     $v["salario_max"] = (float)$v["salario_max"];
+    $v["postulada"] = isset($postuladas[$id]);
+    $v["reportada"] = isset($reportadas[$id]);
 }
 unset($v);
 
