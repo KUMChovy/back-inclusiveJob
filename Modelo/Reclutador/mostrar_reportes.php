@@ -60,6 +60,7 @@ while ($fila = $resultado->fetch_assoc()) {
     $reportes[] = [
 
         "id" => $fila["id_reporte"],
+        "id_vacante"   => $fila["id_vacante"],
         "motivo" => $fila["motivo"],
         "fecha_reporte" => $fila["fecha_reporte"],
 
