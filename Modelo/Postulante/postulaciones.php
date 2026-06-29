@@ -145,6 +145,85 @@ $fila["fecha_postulacion"]
 
 }
 
+// ───────────────────────────────────────────
+// ELIMINAR POSTULACIÓN
+// ───────────────────────────────────────────
+
+if ($_SERVER["REQUEST_METHOD"] === "DELETE") {
+
+$body =
+json_decode(
+file_get_contents("php://input"),
+true
+);
+
+$id_postulacion =
+(int)($body["id_postulacion"] ?? 0);
+
+if (!$id_postulacion) {
+
+echo json_encode([
+"ok"=>false,
+"msg"=>"ID inválido"
+]);
+
+exit;
+
+}
+
+
+// validar que la postulación sea del usuario
+
+$stmt =
+$con->prepare("
+
+DELETE FROM postulaciones
+
+WHERE
+id_postulacion = ?
+AND id_postulante = ?
+
+LIMIT 1
+
+");
+
+$stmt->bind_param(
+"ii",
+$id_postulacion,
+$id_postulante
+);
+
+$stmt->execute();
+
+
+if (
+$stmt->affected_rows <= 0
+) {
+
+echo json_encode([
+"ok"=>false,
+"msg"=>"No encontrada"
+]);
+
+$stmt->close();
+mysqli_close($con);
+exit;
+
+}
+
+$stmt->close();
+
+echo json_encode([
+"ok"=>true,
+"msg"=>"Postulación eliminada"
+]);
+
+mysqli_close($con);
+
+exit;
+
+}
+
 
 echo json_encode([
 
