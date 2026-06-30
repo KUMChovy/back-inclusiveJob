@@ -1,123 +1,165 @@
 <?php
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+require_once __DIR__ . '/_auth.php';
+require_once __DIR__ . '/../../Conexion.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+reclutador_headers();
 
-require_once '../../Conexion.php';
 $con = conectarbd();
+$id_usuario = reclutador_usuario_id();
+$id_reclutador = reclutador_id_desde_usuario($con, $id_usuario, true);
+$accion = $_GET["accion"] ?? "";
 
-function responder($ok, $mensaje, $datos = null) {
-    if (ob_get_length()) ob_clean(); 
-    echo json_encode([
-        'success' => $ok,
-        'message' => $mensaje,
-        'data'    => $datos
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
-}
+function perfil_reclutador_empresa_actual($con, $id_usuario) {
+    $u_empresa = reclutador_columna_existe($con, "usuarios", "empresa") ? "u.empresa" : "NULL";
+    $u_puesto = reclutador_columna_existe($con, "usuarios", "puesto") ? "u.puesto" : "NULL";
+    $u_sector = reclutador_columna_existe($con, "usuarios", "sector") ? "u.sector" : "NULL";
+    $u_validada = reclutador_columna_existe($con, "usuarios", "empresa_validada") ? "u.empresa_validada" : "NULL";
 
-$accion = $_GET['accion'] ?? '';
+    $sql = "SELECT
+                u.id_usuario,
+                u.nombres,
+                u.apellidos,
+                u.correo,
+                COALESCE(u.telefono, '') AS telefono,
+                COALESCE(e.nombre_empresas, $u_empresa, '') AS empresa,
+                COALESCE(r.puesto, $u_puesto, 'Reclutador') AS puesto,
+                COALESCE($u_sector, 'No especificado') AS sector,
+                COALESCE(e.estado_validacion, $u_validada, 0) AS empresa_validada,
+                r.id_reclutador,
+                r.id_empresas
+            FROM usuarios u
+            LEFT JOIN reclutadores r ON r.id_usuario = u.id_usuario
+            LEFT JOIN empresas e ON e.id_empresas = r.id_empresas
+            WHERE u.id_usuario = ? AND u.id_rol = 3
+            LIMIT 1";
 
-// ─────────────────────────────────────────────────────────────
-// ACCIÓN 1: OBTENER LOS DATOS DEL PERFIL Y ESTADO DE VALIDACIÓN
-// ─────────────────────────────────────────────────────────────
-if ($accion === 'obtener') {
-    $id_usuario = (int)($_GET['id_usuario'] ?? 0);
-    if (!$id_usuario) responder(false, 'ID de usuario requerido.');
-
-    $sql = "SELECT id_usuario, nombres, apellidos, correo, telefono, 
-                   COALESCE(empresa, '') AS empresa, 
-                   COALESCE(puesto, 'Reclutador') AS puesto,
-                   COALESCE(sector, 'No especificado') AS sector,
-                   empresa_validada
-            FROM usuarios 
-            WHERE id_usuario = ? AND rol = 'reclutador'";
-            
     $stmt = mysqli_prepare($con, $sql);
-    mysqli_stmt_bind_param($stmt, 'i', $id_usuario);
+    mysqli_stmt_bind_param($stmt, "i", $id_usuario);
     mysqli_stmt_execute($stmt);
-    $res = mysqli_stmt_get_result($stmt);
-    
-    if ($row = mysqli_fetch_assoc($res)) {
-        // Castear a entero para manejo limpio en React
-        $row['empresa_validada'] = (int)$row['empresa_validada'];
-        mysqli_stmt_close($stmt);
-        mysqli_close($con);
-        responder(true, 'Perfil obtenido', $row);
-    } else {
-        mysqli_stmt_close($stmt);
-        mysqli_close($con);
-        responder(false, 'No se encontró el perfil del reclutador.');
-    }
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+
+    return $row;
 }
 
-// ─────────────────────────────────────────────────────────────
-// ACCIÓN 2: ACTUALIZAR PERFIL Y VALIDAR CAMBIO DE EMPRESA
-// ─────────────────────────────────────────────────────────────
-if ($accion === 'actualizar') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $id_usuario = (int)($input['id_usuario'] ?? 0);
-    $nombres    = trim($input['nombres'] ?? '');
-    $apellidos  = trim($input['apellidos'] ?? '');
-    $telefono   = trim($input['telefono'] ?? '');
-    $empresa    = trim($input['empresa'] ?? '');
-    $puesto     = trim($input['puesto'] ?? '');
-    $sector     = trim($input['sector'] ?? '');
+function perfil_reclutador_sync_usuario_legacy($con, $id_usuario, $empresa, $puesto, $sector, $empresa_validada) {
+    $columnas = [
+        "empresa" => $empresa,
+        "puesto" => $puesto,
+        "sector" => $sector,
+    ];
 
-    if (!$id_usuario || empty($nombres) || empty($apellidos)) {
-        responder(false, 'Faltan campos obligatorios (Nombre y Apellidos).');
+    $sets = [];
+    $params = [];
+
+    foreach ($columnas as $columna => $valor) {
+        if (reclutador_columna_existe($con, "usuarios", $columna)) {
+            $sets[] = "$columna = ?";
+            $params[] = $valor;
+        }
     }
 
-    // 1. Verificar si el nombre de la empresa cambió comparándolo con el valor actual
-    $sql_check = "SELECT empresa, empresa_validada FROM usuarios WHERE id_usuario = ?";
-    $stmt_check = mysqli_prepare($con, $sql_check);
-    mysqli_stmt_bind_param($stmt_check, 'i', $id_usuario);
-    mysqli_stmt_execute($stmt_check);
-    $res_check = mysqli_stmt_get_result($stmt_check);
-    $current_data = mysqli_fetch_assoc($res_check);
-    mysqli_stmt_close($stmt_check);
+    if (reclutador_columna_existe($con, "usuarios", "empresa_validada")) {
+        $sets[] = "empresa_validada = ?";
+        $params[] = $empresa_validada;
+    }
 
-    $empresa_actual = $current_data['empresa'] ?? '';
-    $validacion_actual = (int)($current_data['empresa_validada'] ?? 0);
+    if (!$sets) {
+        return;
+    }
 
-    // Si cambia la empresa o estaba vacía y ahora escribe una, el estado vuelve/se queda en 0 (Pendiente)
-    // Si la empresa es exactamente la misma, mantiene el estado de validación que ya tenía.
+    $params[] = $id_usuario;
+    $types = str_repeat("s", count($params) - 1) . "i";
+    $sql = "UPDATE usuarios SET " . implode(", ", $sets) . " WHERE id_usuario = ? AND id_rol = 3";
+    $stmt = mysqli_prepare($con, $sql);
+    mysqli_stmt_bind_param($stmt, $types, ...$params);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+}
+
+if ($accion === "obtener") {
+    $row = perfil_reclutador_empresa_actual($con, $id_usuario);
+
+    if (!$row) {
+        reclutador_responder(false, "No se encontro el perfil del reclutador.", null, 404);
+    }
+
+    $row["id_usuario"] = (int)$row["id_usuario"];
+    $row["empresa_validada"] = (int)$row["empresa_validada"];
+    unset($row["id_reclutador"], $row["id_empresas"]);
+
+    reclutador_responder(true, "Perfil obtenido", $row);
+}
+
+if ($accion === "actualizar" && $_SERVER["REQUEST_METHOD"] === "POST") {
+    $input = reclutador_json_body();
+
+    $nombres = trim($input["nombres"] ?? "");
+    $apellidos = trim($input["apellidos"] ?? "");
+    $telefono = trim($input["telefono"] ?? "");
+    $empresa = trim($input["empresa"] ?? "");
+    $puesto = trim($input["puesto"] ?? "Reclutador");
+    $sector = trim($input["sector"] ?? "No especificado");
+
+    if ($nombres === "" || $apellidos === "") {
+        reclutador_responder(false, "Faltan campos obligatorios: nombre y apellidos.", null, 400);
+    }
+
+    if ($empresa === "") {
+        reclutador_responder(false, "La empresa es obligatoria.", null, 400);
+    }
+
+    $actual = perfil_reclutador_empresa_actual($con, $id_usuario);
+    if (!$actual) {
+        reclutador_responder(false, "Usuario no encontrado en la base de datos.", null, 404);
+    }
+
+    $empresa_actual = trim($actual["empresa"] ?? "");
+    $validacion_actual = (int)($actual["empresa_validada"] ?? 0);
+    $id_empresas = (int)($actual["id_empresas"] ?? 0);
     $nueva_validacion = ($empresa !== $empresa_actual) ? 0 : $validacion_actual;
 
-    // 2. Ejecutar la actualización completa
-    $sql = "UPDATE usuarios SET 
-                nombres = ?, 
-                apellidos = ?, 
-                telefono = ?, 
-                empresa = ?, 
-                puesto = ?, 
-                sector = ?,
-                empresa_validada = ?
-            WHERE id_usuario = ? AND rol = 'reclutador'";
-            
-    $stmt = mysqli_prepare($con, $sql);
-    mysqli_stmt_bind_param($stmt, 'ssssssii', $nombres, $apellidos, $telefono, $empresa, $puesto, $sector, $nueva_validacion, $id_usuario);
-    
-    if (mysqli_stmt_execute($stmt)) {
-        mysqli_stmt_close($stmt);
-        mysqli_close($con);
-        
-        responder(true, 'Perfil actualizado', [
-            'empresa_validada' => $nueva_validacion,
-            'cambio_empresa' => ($empresa !== $empresa_actual)
-        ]);
-    } else {
-        mysqli_stmt_close($stmt);
-        mysqli_close($con);
-        responder(false, 'Error al actualizar los datos en la base de datos.');
+    $stmt_user = mysqli_prepare($con, "UPDATE usuarios SET nombres = ?, apellidos = ?, telefono = ? WHERE id_usuario = ? AND id_rol = 3");
+    mysqli_stmt_bind_param($stmt_user, "sssi", $nombres, $apellidos, $telefono, $id_usuario);
+    if (!mysqli_stmt_execute($stmt_user)) {
+        reclutador_responder(false, "Error al actualizar los datos personales.", null, 500);
     }
+    mysqli_stmt_close($stmt_user);
+
+    if (!$id_empresas) {
+        $stmt_empresa = mysqli_prepare($con, "INSERT INTO empresas (nombre_empresas, descripcion, direccion, telefono_empresa, correo_empresa, sitio_web, estado_validacion) VALUES (?, '', '', '', '', '', ?)");
+        mysqli_stmt_bind_param($stmt_empresa, "si", $empresa, $nueva_validacion);
+
+        if (!mysqli_stmt_execute($stmt_empresa)) {
+            reclutador_responder(false, "Error al crear la empresa.", null, 500);
+        }
+
+        $id_empresas = (int)mysqli_insert_id($con);
+        mysqli_stmt_close($stmt_empresa);
+    } else {
+        $stmt_empresa = mysqli_prepare($con, "UPDATE empresas SET nombre_empresas = ?, estado_validacion = ? WHERE id_empresas = ?");
+        mysqli_stmt_bind_param($stmt_empresa, "sii", $empresa, $nueva_validacion, $id_empresas);
+
+        if (!mysqli_stmt_execute($stmt_empresa)) {
+            reclutador_responder(false, "Error al actualizar la empresa.", null, 500);
+        }
+        mysqli_stmt_close($stmt_empresa);
+    }
+
+    $stmt_reclutador = mysqli_prepare($con, "UPDATE reclutadores SET puesto = ?, id_empresas = ? WHERE id_reclutador = ? AND id_usuario = ?");
+    mysqli_stmt_bind_param($stmt_reclutador, "siii", $puesto, $id_empresas, $id_reclutador, $id_usuario);
+    if (!mysqli_stmt_execute($stmt_reclutador)) {
+        reclutador_responder(false, "Error al actualizar el perfil de reclutador.", null, 500);
+    }
+    mysqli_stmt_close($stmt_reclutador);
+
+    perfil_reclutador_sync_usuario_legacy($con, $id_usuario, $empresa, $puesto, $sector, $nueva_validacion);
+
+    reclutador_responder(true, "Perfil actualizado", [
+        "empresa_validada" => $nueva_validacion,
+        "cambio_empresa" => $empresa !== $empresa_actual
+    ]);
 }
 
-responder(false, 'Acción inválida.');
+reclutador_responder(false, "Accion no permitida.", null, 400);
+?>

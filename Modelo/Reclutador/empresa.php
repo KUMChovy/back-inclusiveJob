@@ -1,121 +1,143 @@
 <?php
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+require_once __DIR__ . '/_auth.php';
+require_once __DIR__ . '/../../Conexion.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+reclutador_headers();
 
-require_once '../../Conexion.php';
 $con = conectarbd();
+$id_usuario = reclutador_usuario_id();
+$id_reclutador = reclutador_id_desde_usuario($con, $id_usuario);
+$accion = $_GET["accion"] ?? "";
 
-function responder($ok, $mensaje, $datos = null) {
-    if (ob_get_length()) ob_clean(); 
-    echo json_encode([
-        'success' => $ok,
-        'message' => $mensaje,
-        'data'    => $datos
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
-}
+if ($accion === "obtener") {
+    $u_empresa = reclutador_columna_existe($con, "usuarios", "empresa") ? "u.empresa" : "NULL";
+    $u_rfc = reclutador_columna_existe($con, "usuarios", "rfc_empresa") ? "u.rfc_empresa" : "NULL";
+    $u_sitio = reclutador_columna_existe($con, "usuarios", "sitio_web") ? "u.sitio_web" : "NULL";
+    $u_descripcion = reclutador_columna_existe($con, "usuarios", "descripcion_empresa") ? "u.descripcion_empresa" : "NULL";
+    $u_direccion = reclutador_columna_existe($con, "usuarios", "direccion_empresa") ? "u.direccion_empresa" : "NULL";
+    $u_validada = reclutador_columna_existe($con, "usuarios", "empresa_validada") ? "u.empresa_validada" : "NULL";
 
-$accion = $_GET['accion'] ?? '';
-
-// ─────────────────────────────────────────────────────────────
-// ACCIÓN 1: OBTENER DATOS CORPORATIVOS
-// ─────────────────────────────────────────────────────────────
-if ($accion === 'obtener') {
-    $id_usuario = (int)($_GET['id_usuario'] ?? 0);
-    if (!$id_usuario) responder(false, 'ID de usuario requerido.');
-
-    $sql = "SELECT 
-                COALESCE(empresa, '') AS nombre_empresa,
-                COALESCE(rfc_empresa, '') AS rfc_empresa,
-                COALESCE(sitio_web, '') AS sitio_web,
-                COALESCE(descripcion_empresa, '') AS descripcion_empresa,
-                COALESCE(direccion_empresa, '') AS direccion_empresa,
-                empresa_validada
-            FROM usuarios 
-            WHERE id_usuario = ? AND rol = 'reclutador'";
-            
+    $sql = "SELECT
+                COALESCE(e.nombre_empresas, $u_empresa, '') AS nombre_empresa,
+                COALESCE($u_rfc, '') AS rfc_empresa,
+                COALESCE(e.sitio_web, $u_sitio, '') AS sitio_web,
+                COALESCE(e.descripcion, $u_descripcion, '') AS descripcion_empresa,
+                COALESCE(e.direccion, $u_direccion, '') AS direccion_empresa,
+                COALESCE(e.estado_validacion, $u_validada, 0) AS empresa_validada,
+                e.id_empresas
+            FROM usuarios u
+            LEFT JOIN reclutadores r ON r.id_usuario = u.id_usuario
+            LEFT JOIN empresas e ON e.id_empresas = r.id_empresas
+            WHERE u.id_usuario = ? AND u.id_rol = 3
+            LIMIT 1";
     $stmt = mysqli_prepare($con, $sql);
-    mysqli_stmt_bind_param($stmt, 'i', $id_usuario);
+    mysqli_stmt_bind_param($stmt, "i", $id_usuario);
     mysqli_stmt_execute($stmt);
     $res = mysqli_stmt_get_result($stmt);
-    
-    if ($row = mysqli_fetch_assoc($res)) {
-        $row['empresa_validada'] = (int)$row['empresa_validada'];
-        mysqli_stmt_close($stmt);
-        mysqli_close($con);
-        responder(true, 'Datos de la empresa obtenidos', $row);
-    } else {
-        mysqli_stmt_close($stmt);
-        mysqli_close($con);
-        responder(false, 'No se encontraron datos corporativos.');
+    $row = mysqli_fetch_assoc($res);
+
+    if (!$row) {
+        reclutador_responder(false, "No se encontraron datos corporativos.", null, 404);
     }
+
+    $row["empresa_validada"] = (int)$row["empresa_validada"];
+    reclutador_responder(true, "Datos de la empresa obtenidos", $row);
 }
 
-// ─────────────────────────────────────────────────────────────
-// ACCIÓN 2: ACTUALIZAR DATOS DE LA EMPRESA Y ENVIAR A VALIDACIÓN
-// ─────────────────────────────────────────────────────────────
-if ($accion === 'actualizar') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $id_usuario          = (int)($input['id_usuario'] ?? 0);
-    $nombre_empresa      = trim($input['nombre_empresa'] ?? '');
-    $rfc_empresa         = trim($input['rfc_empresa'] ?? '');
-    $sitio_web           = trim($input['sitio_web'] ?? '');
-    $descripcion_empresa = trim($input['descripcion_empresa'] ?? '');
-    $direccion_empresa   = trim($input['direccion_empresa'] ?? '');
+if ($accion === "actualizar" && $_SERVER["REQUEST_METHOD"] === "POST") {
+    $input = reclutador_json_body();
+    $nombre_empresa = trim($input["nombre_empresa"] ?? "");
+    $rfc_empresa = trim($input["rfc_empresa"] ?? "");
+    $sitio_web = trim($input["sitio_web"] ?? "");
+    $descripcion_empresa = trim($input["descripcion_empresa"] ?? "");
+    $direccion_empresa = trim($input["direccion_empresa"] ?? "");
 
-    if (!$id_usuario || empty($nombre_empresa)) {
-        responder(false, 'El nombre de la empresa es obligatorio.');
+    if ($nombre_empresa === "") {
+        reclutador_responder(false, "El nombre de la empresa es obligatorio.", null, 400);
     }
 
-    // Consultamos el nombre actual para saber si cambió
-    $sql_check = "SELECT empresa, empresa_validada FROM usuarios WHERE id_usuario = ?";
-    $stmt_check = mysqli_prepare($con, $sql_check);
-    mysqli_stmt_bind_param($stmt_check, 'i', $id_usuario);
+    $stmt_check = mysqli_prepare($con, "SELECT
+            r.id_empresas,
+            e.nombre_empresas,
+            e.estado_validacion
+        FROM usuarios u
+        LEFT JOIN reclutadores r ON r.id_usuario = u.id_usuario
+        LEFT JOIN empresas e ON e.id_empresas = r.id_empresas
+        WHERE u.id_usuario = ?
+        LIMIT 1");
+    mysqli_stmt_bind_param($stmt_check, "i", $id_usuario);
     mysqli_stmt_execute($stmt_check);
-    $res_check = mysqli_stmt_get_result($stmt_check);
-    $current = mysqli_fetch_assoc($res_check);
-    mysqli_stmt_close($stmt_check);
+    $current = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_check));
 
-    $empresa_actual = $current['empresa'] ?? '';
-    $validacion_actual = (int)($current['empresa_validada'] ?? 0);
-
-    // Si cambia el nombre de la empresa, el estatus baja inmediatamente a 0 (pendiente)
-    $nueva_validacion = ($nombre_empresa !== $empresa_actual) ? 0 : $validacion_actual;
-
-    // Asegúrate de tener estas columnas en tu tabla 'usuarios' o ajustarlas según tu estructura:
-    // ALTER TABLE usuarios ADD COLUMN rfc_empresa VARCHAR(20), ADD COLUMN sitio_web VARCHAR(100), ADD COLUMN descripcion_empresa TEXT, ADD COLUMN direccion_empresa TEXT;
-    $sql = "UPDATE usuarios SET 
-                empresa = ?, 
-                rfc_empresa = ?, 
-                sitio_web = ?, 
-                descripcion_empresa = ?, 
-                direccion_empresa = ?,
-                empresa_validada = ?
-            WHERE id_usuario = ? AND rol = 'reclutador'";
-            
-    $stmt = mysqli_prepare($con, $sql);
-    mysqli_stmt_bind_param($stmt, 'sssssii', $nombre_empresa, $rfc_empresa, $sitio_web, $descripcion_empresa, $direccion_empresa, $nueva_validacion, $id_usuario);
-    
-    if (mysqli_stmt_execute($stmt)) {
-        mysqli_stmt_close($stmt);
-        mysqli_close($con);
-        responder(true, 'Datos corporativos actualizados', [
-            'empresa_validada' => $nueva_validacion,
-            'cambio_nombre' => ($nombre_empresa !== $empresa_actual)
-        ]);
-    } else {
-        mysqli_stmt_close($stmt);
-        mysqli_close($con);
-        responder(false, 'Error al guardar los datos de la empresa.');
+    if (!$current) {
+        reclutador_responder(false, "Usuario no encontrado.", null, 404);
     }
+
+    $empresa_actual = $current["nombre_empresas"] ?? "";
+    $validacion_actual = (int)($current["estado_validacion"] ?? 0);
+    $nueva_validacion = ($nombre_empresa !== $empresa_actual) ? 0 : $validacion_actual;
+    $id_empresas = (int)($current["id_empresas"] ?? 0);
+
+    if (!$id_empresas) {
+        $stmt_empresa = mysqli_prepare($con, "INSERT INTO empresas (nombre_empresas, descripcion, direccion, telefono_empresa, correo_empresa, sitio_web, estado_validacion) VALUES (?, ?, ?, '', '', ?, ?)");
+        mysqli_stmt_bind_param($stmt_empresa, "ssssi", $nombre_empresa, $descripcion_empresa, $direccion_empresa, $sitio_web, $nueva_validacion);
+
+        if (!mysqli_stmt_execute($stmt_empresa)) {
+            reclutador_responder(false, "Error al crear la empresa.", null, 500);
+        }
+
+        $id_empresas = (int)mysqli_insert_id($con);
+        $stmt_rel = mysqli_prepare($con, "UPDATE reclutadores SET id_empresas = ? WHERE id_reclutador = ?");
+        mysqli_stmt_bind_param($stmt_rel, "ii", $id_empresas, $id_reclutador);
+        mysqli_stmt_execute($stmt_rel);
+    } else {
+        $stmt_empresa = mysqli_prepare($con, "UPDATE empresas SET nombre_empresas = ?, descripcion = ?, direccion = ?, sitio_web = ?, estado_validacion = ? WHERE id_empresas = ?");
+        mysqli_stmt_bind_param($stmt_empresa, "ssssii", $nombre_empresa, $descripcion_empresa, $direccion_empresa, $sitio_web, $nueva_validacion, $id_empresas);
+
+        if (!mysqli_stmt_execute($stmt_empresa)) {
+            reclutador_responder(false, "Error al guardar la empresa.", null, 500);
+        }
+    }
+
+    $columnas_usuario = [
+        "empresa" => $nombre_empresa,
+        "rfc_empresa" => $rfc_empresa,
+        "sitio_web" => $sitio_web,
+        "descripcion_empresa" => $descripcion_empresa,
+        "direccion_empresa" => $direccion_empresa,
+    ];
+
+    $sets = [];
+    $params = [];
+    foreach ($columnas_usuario as $columna => $valor) {
+        if (reclutador_columna_existe($con, "usuarios", $columna)) {
+            $sets[] = "$columna = ?";
+            $params[] = $valor;
+        }
+    }
+
+    if (reclutador_columna_existe($con, "usuarios", "empresa_validada")) {
+        $sets[] = "empresa_validada = ?";
+        $params[] = $nueva_validacion;
+    }
+
+    if ($sets) {
+        $params[] = $id_usuario;
+        $types = str_repeat("s", count($params) - 1) . "i";
+        $sql = "UPDATE usuarios SET " . implode(", ", $sets) . " WHERE id_usuario = ? AND id_rol = 3";
+        $stmt = mysqli_prepare($con, $sql);
+        mysqli_stmt_bind_param($stmt, $types, ...$params);
+
+        if (!mysqli_stmt_execute($stmt)) {
+            reclutador_responder(false, "Error al sincronizar los datos del usuario.", null, 500);
+        }
+    }
+
+    reclutador_responder(true, "Datos corporativos actualizados", [
+        "empresa_validada" => $nueva_validacion,
+        "cambio_nombre" => $nombre_empresa !== $empresa_actual
+    ]);
 }
 
-responder(false, 'Acción no permitida.');
+reclutador_responder(false, "Accion no permitida.", null, 400);
+?>
