@@ -104,40 +104,30 @@ if (!empty($_FILES["fotoPerfil"]["name"])) {
     $ext         = strtolower(pathinfo($archivo["name"], PATHINFO_EXTENSION));
 
     if (!in_array($ext, $extensiones, true)) {
-        // ── ACTUALIZAR FOTO DE PERFIL ────────────────────────────────
-        if ($foto_perfil_ruta) {
-
-            $stmtFoto = mysqli_prepare(
-                $con,
-                "UPDATE usuarios
-                    SET foto_perfil = ?
-                WHERE id_usuario = ?"
-            );
-
-            mysqli_stmt_bind_param(
-                $stmtFoto,
-                "si",
-                $foto_perfil_ruta,
-                $id_usuario
-            );
-
-            mysqli_stmt_execute($stmtFoto);
-            mysqli_stmt_close($stmtFoto);
-        }
         mysqli_close($con);
         echo json_encode(["ok" => false, "msg" => "Formato no valido. Usa JPG, PNG o WEBP."]);
         exit;
     }
+
     if ($archivo["size"] > 5 * 1024 * 1024) {
         mysqli_close($con);
         echo json_encode(["ok" => false, "msg" => "La imagen no debe superar 5 MB."]);
         exit;
     }
 
+    if ($archivo["error"] !== UPLOAD_ERR_OK) {
+        mysqli_close($con);
+        echo json_encode(["ok" => false, "msg" => "Error al subir el archivo (codigo " . $archivo["error"] . ")."]);
+        exit;
+    }
+
     $carpeta = __DIR__ . "/../../uploads/fotos_perfil/";
-    if (!is_dir($carpeta)) mkdir($carpeta, 0755, true);
+    if (!is_dir($carpeta)) {
+        mkdir($carpeta, 0755, true);
+    }
 
     $nombre_archivo = "perfil_" . $id_usuario . "_" . time() . "." . $ext;
+
     if (!move_uploaded_file($archivo["tmp_name"], $carpeta . $nombre_archivo)) {
         mysqli_close($con);
         echo json_encode(["ok" => false, "msg" => "No se pudo guardar la imagen."]);
@@ -148,28 +138,46 @@ if (!empty($_FILES["fotoPerfil"]["name"])) {
 }
 
 // ── UPDATE usuarios ───────────────────────────────────────────
-// ── UPDATE usuarios ───────────────────────────────────────────
-$stmtU = mysqli_prepare(
-    $con,
-    "UPDATE usuarios
-        SET nombres = ?,
-            apellidos = ?,
-            telefono = ?
-     WHERE id_usuario = ?"
-);
-
-mysqli_stmt_bind_param(
-    $stmtU,
-    "sssi",
-    $nombres,
-    $apellidos,
-    $telefono,
-    $id_usuario
-);
+if ($foto_perfil_ruta !== null) {
+    $stmtU = mysqli_prepare(
+        $con,
+        "UPDATE usuarios
+            SET nombres = ?,
+                apellidos = ?,
+                telefono = ?,
+                foto_perfil = ?
+         WHERE id_usuario = ?"
+    );
+    mysqli_stmt_bind_param(
+        $stmtU,
+        "ssssi",
+        $nombres,
+        $apellidos,
+        $telefono,
+        $foto_perfil_ruta,
+        $id_usuario
+    );
+} else {
+    $stmtU = mysqli_prepare(
+        $con,
+        "UPDATE usuarios
+            SET nombres = ?,
+                apellidos = ?,
+                telefono = ?
+         WHERE id_usuario = ?"
+    );
+    mysqli_stmt_bind_param(
+        $stmtU,
+        "sssi",
+        $nombres,
+        $apellidos,
+        $telefono,
+        $id_usuario
+    );
+}
 
 mysqli_stmt_execute($stmtU);
 mysqli_stmt_close($stmtU);
-
 
 $_SESSION["user"]["nombre"]   = $nombres;
 $_SESSION["user"]["apellido"] = $apellidos;
@@ -227,13 +235,11 @@ if (!empty($discapacidades)) {
 }
 
 mysqli_close($con);
+
 echo json_encode([
-    "ok"         => true,
-    "msg"        => "Perfil actualizado correctamente.",
+    "ok"          => true,
+    "msg"         => "Perfil actualizado correctamente.",
     "foto_perfil" => $foto_perfil_ruta
-    ? "[http://localhost/inclusijob_back/back-inclusiveJob/](http://localhost/inclusijob_back/back-inclusiveJob/)" . $foto_perfil_ruta
-    : null
+        ? "http://localhost/inclusijob_back/back-inclusiveJob/" . $foto_perfil_ruta
+        : null
 ]);
-?>
-
-
