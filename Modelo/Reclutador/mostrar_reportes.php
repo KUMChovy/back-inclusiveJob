@@ -32,7 +32,13 @@ $resultado = mysqli_stmt_get_result($stmt);
 $reportes = [];
 while ($fila = mysqli_fetch_assoc($resultado)) {
     $reportes[] = [
+<<<<<<< HEAD
         "id" => (int)$fila["id_reporte"],
+=======
+
+        "id" => $fila["id_reporte"],
+        "id_vacante"   => $fila["id_vacante"],
+>>>>>>> 9c12442f48a480a83674472513139362cf0b0b00
         "motivo" => $fila["motivo"],
         "fecha_reporte" => $fila["fecha_reporte"],
         "id_vacante" => (int)$fila["id_vacante"],
