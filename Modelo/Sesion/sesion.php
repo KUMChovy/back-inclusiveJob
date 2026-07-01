@@ -88,7 +88,7 @@ if (!isset($_SESSION["user"])) {
 ========================= */
 
 if (!isset($_SESSION["session_timeout"])) {
-    $_SESSION["session_timeout"] = 1800; // 30 min
+    $_SESSION["session_timeout"] = 86400; // 1 día
 }
 
 /* =========================
