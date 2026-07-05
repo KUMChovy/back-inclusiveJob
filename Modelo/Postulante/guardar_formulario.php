@@ -30,7 +30,7 @@ if (!isset($_SESSION["user"]["id"])) {
     exit;
 }
 
-$id_usuario = (int)$_SESSION["user"]["id"];
+$id_usuario       = (int)$_SESSION["user"]["id"];
 $id_usuario_front = (int)($_POST["id_usuario"] ?? 0);
 
 if ($id_usuario <= 0) {
@@ -53,7 +53,7 @@ $stmtUsuario = mysqli_prepare($con, "SELECT id_rol FROM usuarios WHERE id_usuari
 mysqli_stmt_bind_param($stmtUsuario, "i", $id_usuario);
 mysqli_stmt_execute($stmtUsuario);
 $resUsuario = mysqli_stmt_get_result($stmtUsuario);
-$usuarioDb = mysqli_fetch_assoc($resUsuario);
+$usuarioDb  = mysqli_fetch_assoc($resUsuario);
 mysqli_stmt_close($stmtUsuario);
 
 if (!$usuarioDb || (int)$usuarioDb["id_rol"] !== 2) {
@@ -63,6 +63,9 @@ if (!$usuarioDb || (int)$usuarioDb["id_rol"] !== 2) {
     exit;
 }
 
+// ════════════════════════════════════════════════════════════
+//  GET — verificar si el formulario ya fue completado
+// ════════════════════════════════════════════════════════════
 if ($_SERVER["REQUEST_METHOD"] === "GET") {
     $stmtCheck = mysqli_prepare($con,
         "SELECT
@@ -79,7 +82,7 @@ if ($_SERVER["REQUEST_METHOD"] === "GET") {
     );
     mysqli_stmt_bind_param($stmtCheck, "i", $id_usuario);
     mysqli_stmt_execute($stmtCheck);
-    $resCheck = mysqli_stmt_get_result($stmtCheck);
+    $resCheck   = mysqli_stmt_get_result($stmtCheck);
     $postulante = mysqli_fetch_assoc($resCheck);
     mysqli_stmt_close($stmtCheck);
     mysqli_close($con);
@@ -88,114 +91,125 @@ if ($_SERVER["REQUEST_METHOD"] === "GET") {
     if ($postulante) {
         $completado =
             trim((string)($postulante["descripcion_discapacidad"] ?? "")) !== "" &&
-            trim((string)($postulante["experiencia"] ?? "")) !== "" &&
-            trim((string)($postulante["habilidades"] ?? "")) !== "" &&
+            trim((string)($postulante["experiencia"]              ?? "")) !== "" &&
+            trim((string)($postulante["habilidades"]              ?? "")) !== "" &&
             $postulante["esfuerzo_fisico_posible"] !== null;
-
     }
 
     echo json_encode([
-        "success" => true,
-        "completado" => $completado,
+        "success"             => true,
+        "completado"          => $completado,
         "requiere_formulario" => !$completado,
-        "id_postulante" => $postulante ? (int)$postulante["id_postulante"] : null
+        "id_postulante"       => $postulante ? (int)$postulante["id_postulante"] : null,
     ]);
     exit;
 }
 
-$tipoDiscapacidad        = trim($_POST["tipoDiscapacidad"] ?? "");
+// ════════════════════════════════════════════════════════════
+//  POST — guardar formulario
+// ════════════════════════════════════════════════════════════
+$tipoDiscapacidad        = trim($_POST["tipoDiscapacidad"]        ?? "");
 $descripcionDiscapacidad = trim($_POST["descripcionDiscapacidad"] ?? "");
-$esfuerzoFisicoRaw       = trim($_POST["esfuerzoFisico"] ?? "");
-$experiencia             = trim($_POST["experiencia"] ?? "");
-$habilidades             = trim($_POST["habilidades"] ?? "");
+$esfuerzoFisicoRaw       = trim($_POST["esfuerzoFisico"]          ?? "");
+$experiencia             = trim($_POST["experiencia"]             ?? "");
+$habilidades             = trim($_POST["habilidades"]             ?? "");
 $esfuerzo_fisico         = ($esfuerzoFisicoRaw === "No") ? 0 : 1;
 
+// ── Validaciones de texto ─────────────────────────────────
 if ($tipoDiscapacidad === "") {
     echo json_encode(["success" => false, "mensaje" => "Debes seleccionar un tipo de discapacidad."]);
     exit;
 }
-
 if ($descripcionDiscapacidad === "") {
     echo json_encode(["success" => false, "mensaje" => "La descripcion de la discapacidad es requerida."]);
     exit;
 }
-
 if ($esfuerzoFisicoRaw === "") {
     echo json_encode(["success" => false, "mensaje" => "Indica si puedes realizar esfuerzo fisico."]);
     exit;
 }
-
 if ($experiencia === "") {
     echo json_encode(["success" => false, "mensaje" => "La experiencia es requerida."]);
     exit;
 }
-
 if ($habilidades === "") {
     echo json_encode(["success" => false, "mensaje" => "Las habilidades son requeridas."]);
     exit;
 }
 
-$foto_perfil_ruta = null;
-
-if (!empty($_FILES["fotoPerfil"]["name"])) {
-    $archivo = $_FILES["fotoPerfil"];
-    $extensiones = ["jpg", "jpeg", "png", "webp"];
-    $ext = strtolower(pathinfo($archivo["name"], PATHINFO_EXTENSION));
-
-    if (!in_array($ext, $extensiones, true)) {
-        mysqli_close($con);
-        echo json_encode(["success" => false, "mensaje" => "Formato de imagen no valido. Usa JPG, PNG o WEBP."]);
-        exit;
-    }
-
-    if ($archivo["size"] > 5 * 1024 * 1024) {
-        mysqli_close($con);
-        echo json_encode(["success" => false, "mensaje" => "La imagen no debe superar los 5 MB."]);
-        exit;
-    }
-
-    $carpeta_destino = __DIR__ . "/../../uploads/fotos_perfil/";
-    if (!is_dir($carpeta_destino)) {
-        mkdir($carpeta_destino, 0755, true);
-    }
-
-    $nombre_archivo = "perfil_" . $id_usuario . "_" . time() . "." . $ext;
-    $ruta_completa = $carpeta_destino . $nombre_archivo;
-
-    if (!move_uploaded_file($archivo["tmp_name"], $ruta_completa)) {
-        mysqli_close($con);
-        echo json_encode(["success" => false, "mensaje" => "No se pudo guardar la imagen."]);
-        exit;
-    }
-
-    $foto_perfil_ruta = "uploads/fotos_perfil/" . $nombre_archivo;
+// ── NUEVO: foto obligatoria ───────────────────────────────
+if (empty($_FILES["fotoPerfil"]["name"]) || $_FILES["fotoPerfil"]["error"] === UPLOAD_ERR_NO_FILE) {
+    mysqli_close($con);
+    echo json_encode(["success" => false, "mensaje" => "La foto de perfil es obligatoria."]);
+    exit;
 }
 
+// ── Procesar foto ─────────────────────────────────────────
+$archivo     = $_FILES["fotoPerfil"];
+$extensiones = ["jpg", "jpeg", "png", "webp"];
+$ext         = strtolower(pathinfo($archivo["name"], PATHINFO_EXTENSION));
+
+if (!in_array($ext, $extensiones, true)) {
+    mysqli_close($con);
+    echo json_encode(["success" => false, "mensaje" => "Formato de imagen no valido. Usa JPG, PNG o WEBP."]);
+    exit;
+}
+
+if ($archivo["size"] > 5 * 1024 * 1024) {
+    mysqli_close($con);
+    echo json_encode(["success" => false, "mensaje" => "La imagen no debe superar los 5 MB."]);
+    exit;
+}
+
+$carpeta_destino = __DIR__ . "/../../uploads/fotos_perfil/";
+if (!is_dir($carpeta_destino)) {
+    mkdir($carpeta_destino, 0755, true);
+}
+
+$nombre_archivo = "perfil_" . $id_usuario . "_" . time() . "." . $ext;
+$ruta_completa  = $carpeta_destino . $nombre_archivo;
+
+if (!move_uploaded_file($archivo["tmp_name"], $ruta_completa)) {
+    mysqli_close($con);
+    echo json_encode(["success" => false, "mensaje" => "No se pudo guardar la imagen."]);
+    exit;
+}
+
+$foto_perfil_ruta = "uploads/fotos_perfil/" . $nombre_archivo;
+
+// ── Verificar si ya existe el postulante ──────────────────
 $stmtCheck = mysqli_prepare($con, "SELECT id_postulante FROM postulantes WHERE id_usuario = ? LIMIT 1");
 mysqli_stmt_bind_param($stmtCheck, "i", $id_usuario);
 mysqli_stmt_execute($stmtCheck);
-$resCheck = mysqli_stmt_get_result($stmtCheck);
+$resCheck             = mysqli_stmt_get_result($stmtCheck);
 $postulante_existente = mysqli_fetch_assoc($resCheck);
 mysqli_stmt_close($stmtCheck);
 
+// ── INSERT o UPDATE ───────────────────────────────────────
 if ($postulante_existente) {
     $id_postulante = (int)$postulante_existente["id_postulante"];
     $stmtP = mysqli_prepare($con,
         "UPDATE postulantes
             SET descripcion_discapacidad = ?,
-                esfuerzo_fisico_posible = ?,
-                experiencia = ?,
-                habilidades = ?
+                esfuerzo_fisico_posible  = ?,
+                experiencia              = ?,
+                habilidades              = ?
           WHERE id_postulante = ?"
     );
-    mysqli_stmt_bind_param($stmtP, "sissi", $descripcionDiscapacidad, $esfuerzo_fisico, $experiencia, $habilidades, $id_postulante);
+    mysqli_stmt_bind_param($stmtP, "sissi",
+        $descripcionDiscapacidad, $esfuerzo_fisico,
+        $experiencia, $habilidades, $id_postulante
+    );
 } else {
     $stmtP = mysqli_prepare($con,
         "INSERT INTO postulantes
             (descripcion_discapacidad, esfuerzo_fisico_posible, experiencia, habilidades, id_usuario)
          VALUES (?, ?, ?, ?, ?)"
     );
-    mysqli_stmt_bind_param($stmtP, "sissi", $descripcionDiscapacidad, $esfuerzo_fisico, $experiencia, $habilidades, $id_usuario);
+    mysqli_stmt_bind_param($stmtP, "sissi",
+        $descripcionDiscapacidad, $esfuerzo_fisico,
+        $experiencia, $habilidades, $id_usuario
+    );
 }
 
 if (!mysqli_stmt_execute($stmtP)) {
@@ -211,18 +225,20 @@ if (!$postulante_existente) {
 }
 mysqli_stmt_close($stmtP);
 
-if ($foto_perfil_ruta) {
-    $stmtFoto = mysqli_prepare($con, "UPDATE usuarios SET foto_perfil = ? WHERE id_usuario = ?");
-    mysqli_stmt_bind_param($stmtFoto, "si", $foto_perfil_ruta, $id_usuario);
-    mysqli_stmt_execute($stmtFoto);
-    mysqli_stmt_close($stmtFoto);
-}
+// ── Guardar foto en usuarios ──────────────────────────────
+$stmtFoto = mysqli_prepare($con, "UPDATE usuarios SET foto_perfil = ? WHERE id_usuario = ?");
+mysqli_stmt_bind_param($stmtFoto, "si", $foto_perfil_ruta, $id_usuario);
+mysqli_stmt_execute($stmtFoto);
+mysqli_stmt_close($stmtFoto);
 
-$stmtTipo = mysqli_prepare($con, "SELECT id_tipo_discapacidad FROM tipo_discapacidad WHERE nombre_discapacidad = ? LIMIT 1");
+// ── Tipo de discapacidad ──────────────────────────────────
+$stmtTipo = mysqli_prepare($con,
+    "SELECT id_tipo_discapacidad FROM tipo_discapacidad WHERE nombre_discapacidad = ? LIMIT 1"
+);
 mysqli_stmt_bind_param($stmtTipo, "s", $tipoDiscapacidad);
 mysqli_stmt_execute($stmtTipo);
 $resTipo = mysqli_stmt_get_result($stmtTipo);
-$tipo = mysqli_fetch_assoc($resTipo);
+$tipo    = mysqli_fetch_assoc($resTipo);
 mysqli_stmt_close($stmtTipo);
 
 if ($tipo) {
@@ -233,7 +249,9 @@ if ($tipo) {
     mysqli_stmt_execute($stmtDel);
     mysqli_stmt_close($stmtDel);
 
-    $stmtIns = mysqli_prepare($con, "INSERT INTO postulante_discapacidad (id_postulante, id_tipo_discapacidad) VALUES (?, ?)");
+    $stmtIns = mysqli_prepare($con,
+        "INSERT INTO postulante_discapacidad (id_postulante, id_tipo_discapacidad) VALUES (?, ?)"
+    );
     mysqli_stmt_bind_param($stmtIns, "ii", $id_postulante, $id_tipo);
     mysqli_stmt_execute($stmtIns);
     mysqli_stmt_close($stmtIns);
@@ -242,8 +260,7 @@ if ($tipo) {
 mysqli_close($con);
 
 echo json_encode([
-    "success" => true,
-    "mensaje" => "Perfil guardado correctamente.",
-    "id_postulante" => $id_postulante
+    "success"       => true,
+    "mensaje"       => "Perfil guardado correctamente.",
+    "id_postulante" => $id_postulante,
 ]);
-?>
