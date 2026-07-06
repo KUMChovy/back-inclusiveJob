@@ -16,7 +16,7 @@ if(trim($mensaje)==""){
 
 }
 
-$apiKey="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";
+$apiKey="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";
 
 $url="https://api.groq.com/openai/v1/chat/completions";
 
