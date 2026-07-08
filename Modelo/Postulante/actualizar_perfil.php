@@ -67,7 +67,7 @@ $apellidos = limpiar($_POST["apellidos"] ?? "");
 $telefono  = limpiar($_POST["telefono"]  ?? "");
 $experiencia = limpiar($_POST["experiencia"] ?? "");
 $portafolio  = limpiar($_POST["portafolio_url"] ?? "");
-$esfuerzo    = isset($_POST["esfuerzo_fisico_posible"]) ? (int)$_POST["esfuerzo_fisico_posible"] : 0;
+$esfuerzo    = isset($_POST["esfuerzo_fisico_posible"]) ? trim((string)$_POST["esfuerzo_fisico_posible"]) : "";
 
 // Skills llegan como JSON string
 $habilidades = "";
@@ -89,7 +89,71 @@ if ($discRaw !== "") {
 
 // descripcion_discapacidad = nota + porcentaje
 $nota       = limpiar($_POST["nota"]       ?? "");
-$porcentaje = limpiar($_POST["porcentaje"] ?? "");
+$porcentaje = trim((string)($_POST["porcentaje"] ?? ""));
+
+// ── VALIDACIONES ──────────────────────────────────────────────
+// Cada regla revisa el campo y, si falla, corta la ejecucion
+// devolviendo ok:false + un mensaje que el frontend puede mostrar
+// como alerta.
+
+$errores = [];
+
+// nombres y apellidos: solo letras (incluye tildes/ñ) y espacios
+$regexTexto = '/^[A-Za-zÀ-ÖØ-öø-ÿÑñ\s]+$/u';
+
+if ($nombres === "" || !preg_match($regexTexto, $nombres)) {
+    $errores[] = "El campo 'nombres' solo debe contener letras.";
+}
+
+if ($apellidos === "" || !preg_match($regexTexto, $apellidos)) {
+    $errores[] = "El campo 'apellidos' solo debe contener letras.";
+}
+
+// telefono: solo numeros, entre 7 y 9 digitos (ajusta segun tu pais)
+if ($telefono !== "" && !preg_match('/^[0-9]{7,9}$/', $telefono)) {
+    $errores[] = "El campo 'telefono' debe contener solo numeros (7 a 9 digitos).";
+}
+
+// esfuerzo_fisico_posible: numerico, dentro de un rango valido (0-1 o 1-5, ajusta segun tu escala)
+if ($esfuerzo === "" || !ctype_digit($esfuerzo) || (int)$esfuerzo < 0 || (int)$esfuerzo > 5) {
+    $errores[] = "El campo 'esfuerzo fisico posible' debe ser un numero valido (0 a 5).";
+}
+
+// porcentaje: si viene, debe ser numerico entre 0 y 100
+if ($porcentaje !== "" && (!is_numeric($porcentaje) || (float)$porcentaje < 0 || (float)$porcentaje > 100)) {
+    $errores[] = "El campo 'porcentaje' debe ser un numero entre 0 y 100.";
+}
+
+// portafolio_url: si viene, debe tener formato de URL valido
+if ($portafolio !== "" && !filter_var($portafolio, FILTER_VALIDATE_URL)) {
+    $errores[] = "El campo 'portafolio' debe ser una URL valida (ej: https://midominio.com).";
+}
+
+// experiencia: no vacio y longitud razonable
+if ($experiencia === "") {
+    $errores[] = "El campo 'experiencia' no puede estar vacio.";
+} elseif (mb_strlen($experiencia) > 2000) {
+    $errores[] = "El campo 'experiencia' es demasiado largo (maximo 2000 caracteres).";
+}
+
+// skills: si vino, debe ser un array valido tras el decode
+if ($skillsRaw !== "" && $habilidades === "") {
+    $errores[] = "El campo 'skills' tiene un formato invalido.";
+}
+
+if (!empty($errores)) {
+    mysqli_close($con);
+    http_response_code(422);
+    echo json_encode([
+        "ok"  => false,
+        "msg" => implode(" ", $errores)
+    ]);
+    exit;
+}
+
+$esfuerzo = (int)$esfuerzo;
+
+// descripcion_discapacidad = nota + porcentaje
 $desc_disc  = $nota;
 if ($porcentaje !== "") {
     $desc_disc = $nota !== "" ? $nota . " | " . $porcentaje . "%" : $porcentaje . "%";
