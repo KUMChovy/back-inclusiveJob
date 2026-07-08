@@ -1,5 +1,6 @@
 {
     "require": {
-        "phpmailer/phpmailer": "^7.1"
+        "phpmailer/phpmailer": "^7.1",
+        "smalot/pdfparser": "^2.12"
     }
 }
