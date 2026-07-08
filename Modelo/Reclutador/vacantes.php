@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../../Conexion.php';
 
@@ -9,6 +9,142 @@ $id_usuario = reclutador_usuario_id();
 $id_reclutador = reclutador_id_desde_usuario($con, $id_usuario);
 $accion = $_GET["accion"] ?? "";
 $data = reclutador_json_body();
+
+function vacante_discapacidad_columnas($con) {
+    $vacante_col = reclutador_columna_existe($con, 'vacante_discapacidad', 'id_vacante') ? 'id_vacante' : 'vacante_id';
+    $tipo_col = reclutador_columna_existe($con, 'vacante_discapacidad', 'id_tipo_discapacidad') ? 'id_tipo_discapacidad' : 'tipo_discapacidad_id';
+
+    if (!reclutador_columna_existe($con, 'vacante_discapacidad', $vacante_col) || !reclutador_columna_existe($con, 'vacante_discapacidad', $tipo_col)) {
+        reclutador_responder(false, 'La tabla vacante_discapacidad no tiene las columnas esperadas.', null, 500);
+    }
+
+    return [$vacante_col, $tipo_col];
+}
+
+function vacante_discapacidad_ids($raw) {
+    if (is_string($raw)) {
+        $decoded = json_decode($raw, true);
+        $raw = is_array($decoded) ? $decoded : explode(',', $raw);
+    }
+
+    if (!is_array($raw)) {
+        return [];
+    }
+
+    $ids = [];
+    foreach ($raw as $value) {
+        $id = (int)$value;
+        if ($id > 0) {
+            $ids[$id] = $id;
+        }
+    }
+
+    return array_values($ids);
+}
+
+function vacante_validar_discapacidades($con, $ids) {
+    if (!$ids) {
+        return [];
+    }
+
+    $ids = array_values(array_unique(array_map('intval', $ids)));
+    $in = implode(',', $ids);
+    $res = mysqli_query($con, "SELECT id_tipo_discapacidad FROM tipo_discapacidad WHERE id_tipo_discapacidad IN ($in)");
+
+    if (!$res) {
+        reclutador_responder(false, 'No se pudieron validar las discapacidades.', null, 500);
+    }
+
+    $validos = [];
+    while ($row = mysqli_fetch_assoc($res)) {
+        $validos[] = (int)$row['id_tipo_discapacidad'];
+    }
+
+    sort($ids);
+    sort($validos);
+
+    if ($ids !== $validos) {
+        reclutador_responder(false, 'Una o mas discapacidades seleccionadas no existen.', null, 400);
+    }
+
+    return $validos;
+}
+
+function vacante_sync_discapacidades($con, $id_vacante, $ids) {
+    [$vacante_col, $tipo_col] = vacante_discapacidad_columnas($con);
+
+    $stmt_del = mysqli_prepare($con, "DELETE FROM vacante_discapacidad WHERE `$vacante_col` = ?");
+    mysqli_stmt_bind_param($stmt_del, 'i', $id_vacante);
+    if (!mysqli_stmt_execute($stmt_del)) {
+        return false;
+    }
+    mysqli_stmt_close($stmt_del);
+
+    if (!$ids) {
+        return true;
+    }
+
+    $stmt_ins = mysqli_prepare($con, "INSERT IGNORE INTO vacante_discapacidad (`$vacante_col`, `$tipo_col`) VALUES (?, ?)");
+    foreach ($ids as $id_tipo) {
+        $id_tipo = (int)$id_tipo;
+        mysqli_stmt_bind_param($stmt_ins, 'ii', $id_vacante, $id_tipo);
+        if (!mysqli_stmt_execute($stmt_ins)) {
+            mysqli_stmt_close($stmt_ins);
+            return false;
+        }
+    }
+    mysqli_stmt_close($stmt_ins);
+
+    return true;
+}
+
+function vacante_agregar_discapacidades($con, &$vacantes) {
+    if (!$vacantes) {
+        return;
+    }
+
+    [$vacante_col, $tipo_col] = vacante_discapacidad_columnas($con);
+    $ids = array_map(fn($v) => (int)$v['id_vacante'], $vacantes);
+    $in = implode(',', $ids);
+    $sql = "SELECT
+                vd.`$vacante_col` AS id_vacante,
+                td.id_tipo_discapacidad,
+                td.nombre_discapacidad,
+                COALESCE(td.descripcion, '') AS descripcion
+            FROM vacante_discapacidad vd
+            INNER JOIN tipo_discapacidad td ON td.id_tipo_discapacidad = vd.`$tipo_col`
+            WHERE vd.`$vacante_col` IN ($in)
+            ORDER BY td.nombre_discapacidad ASC";
+    $res = mysqli_query($con, $sql);
+
+    $por_vacante = [];
+    if ($res) {
+        while ($row = mysqli_fetch_assoc($res)) {
+            $id_vacante = (int)$row['id_vacante'];
+            $por_vacante[$id_vacante][] = [
+                'id_tipo_discapacidad' => (int)$row['id_tipo_discapacidad'],
+                'nombre_discapacidad' => $row['nombre_discapacidad'],
+                'descripcion' => $row['descripcion'],
+            ];
+        }
+    }
+
+    foreach ($vacantes as &$vacante) {
+        $id = (int)$vacante['id_vacante'];
+        $vacante['discapacidades'] = $por_vacante[$id] ?? [];
+        $vacante['discapacidad_ids'] = array_map(fn($d) => (int)$d['id_tipo_discapacidad'], $vacante['discapacidades']);
+    }
+    unset($vacante);
+}
+
+function vacante_pertenece_reclutador($con, $id_vacante, $id_reclutador) {
+    $stmt = mysqli_prepare($con, 'SELECT id_vacante FROM vacantes WHERE id_vacante = ? AND id_reclutador = ? LIMIT 1');
+    mysqli_stmt_bind_param($stmt, 'ii', $id_vacante, $id_reclutador);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+    return (bool)$row;
+}
 
 if ($accion === "listar") {
     $sql = "SELECT id_vacante, titulo_puesto, descripcion_puesto, requisitos, modalidad,
@@ -23,9 +159,12 @@ if ($accion === "listar") {
 
     $vacantes = [];
     while ($row = mysqli_fetch_assoc($res)) {
+        $row['id_vacante'] = (int)$row['id_vacante'];
         $vacantes[] = $row;
     }
+    mysqli_stmt_close($stmt);
 
+    vacante_agregar_discapacidades($con, $vacantes);
     reclutador_responder(true, "Vacantes obtenidas", $vacantes);
 }
 
@@ -39,10 +178,13 @@ if (($accion === "insertar" || $accion === "guardar") && $_SERVER["REQUEST_METHO
     $estado = trim($data["estado"] ?? "activa");
     $fecha_cierre = trim($data["fecha_cierre"] ?? "");
     $fecha_cierre = $fecha_cierre !== "" ? $fecha_cierre : null;
+    $discapacidades = vacante_validar_discapacidades($con, vacante_discapacidad_ids($data['discapacidades'] ?? []));
 
     if ($titulo === "") {
         reclutador_responder(false, "El titulo de la vacante es obligatorio.", null, 400);
     }
+
+    mysqli_begin_transaction($con);
 
     $sql = "INSERT INTO vacantes
                 (titulo_puesto, descripcion_puesto, requisitos, modalidad, salario_min, salario_max, estado, fecha_publicacion, fecha_cierre, id_reclutador)
@@ -51,10 +193,20 @@ if (($accion === "insertar" || $accion === "guardar") && $_SERVER["REQUEST_METHO
     mysqli_stmt_bind_param($stmt, "ssssddssi", $titulo, $descripcion, $requisitos, $modalidad, $salario_min, $salario_max, $estado, $fecha_cierre, $id_reclutador);
 
     if (!mysqli_stmt_execute($stmt)) {
+        mysqli_rollback($con);
         reclutador_responder(false, "Error al crear la vacante: " . mysqli_error($con), null, 500);
     }
 
-    reclutador_responder(true, "Vacante creada correctamente", ["id_vacante" => mysqli_insert_id($con)]);
+    $id_vacante = (int)mysqli_insert_id($con);
+    mysqli_stmt_close($stmt);
+
+    if (!vacante_sync_discapacidades($con, $id_vacante, $discapacidades)) {
+        mysqli_rollback($con);
+        reclutador_responder(false, "Error al guardar las discapacidades de la vacante.", null, 500);
+    }
+
+    mysqli_commit($con);
+    reclutador_responder(true, "Vacante creada correctamente", ["id_vacante" => $id_vacante]);
 }
 
 if ($accion === "editar" && $_SERVER["REQUEST_METHOD"] === "POST") {
@@ -68,10 +220,17 @@ if ($accion === "editar" && $_SERVER["REQUEST_METHOD"] === "POST") {
     $estado = trim($data["estado"] ?? "activa");
     $fecha_cierre = trim($data["fecha_cierre"] ?? "");
     $fecha_cierre = $fecha_cierre !== "" ? $fecha_cierre : null;
+    $discapacidades = vacante_validar_discapacidades($con, vacante_discapacidad_ids($data['discapacidades'] ?? []));
 
     if (!$id_vacante || $titulo === "") {
         reclutador_responder(false, "Faltan datos para actualizar la vacante.", null, 400);
     }
+
+    if (!vacante_pertenece_reclutador($con, $id_vacante, $id_reclutador)) {
+        reclutador_responder(false, "No se encontro la vacante.", null, 404);
+    }
+
+    mysqli_begin_transaction($con);
 
     $sql = "UPDATE vacantes
             SET titulo_puesto = ?, descripcion_puesto = ?, requisitos = ?, modalidad = ?,
@@ -81,9 +240,17 @@ if ($accion === "editar" && $_SERVER["REQUEST_METHOD"] === "POST") {
     mysqli_stmt_bind_param($stmt, "ssssddssii", $titulo, $descripcion, $requisitos, $modalidad, $salario_min, $salario_max, $estado, $fecha_cierre, $id_vacante, $id_reclutador);
 
     if (!mysqli_stmt_execute($stmt)) {
+        mysqli_rollback($con);
         reclutador_responder(false, "Error al actualizar la vacante: " . mysqli_error($con), null, 500);
     }
+    mysqli_stmt_close($stmt);
 
+    if (!vacante_sync_discapacidades($con, $id_vacante, $discapacidades)) {
+        mysqli_rollback($con);
+        reclutador_responder(false, "Error al actualizar las discapacidades de la vacante.", null, 500);
+    }
+
+    mysqli_commit($con);
     reclutador_responder(true, "Vacante actualizada con exito");
 }
 
@@ -112,13 +279,30 @@ if ($accion === "eliminar") {
         reclutador_responder(false, "ID de vacante requerido.", null, 400);
     }
 
+    if (!vacante_pertenece_reclutador($con, $id_vacante, $id_reclutador)) {
+        reclutador_responder(false, "No se encontro la vacante.", null, 404);
+    }
+
+    [$vacante_col] = vacante_discapacidad_columnas($con);
+    mysqli_begin_transaction($con);
+
+    $stmt_rel = mysqli_prepare($con, "DELETE FROM vacante_discapacidad WHERE `$vacante_col` = ?");
+    mysqli_stmt_bind_param($stmt_rel, "i", $id_vacante);
+    if (!mysqli_stmt_execute($stmt_rel)) {
+        mysqli_rollback($con);
+        reclutador_responder(false, "No se pudieron eliminar las discapacidades de la vacante.", null, 500);
+    }
+    mysqli_stmt_close($stmt_rel);
+
     $stmt = mysqli_prepare($con, "DELETE FROM vacantes WHERE id_vacante = ? AND id_reclutador = ?");
     mysqli_stmt_bind_param($stmt, "ii", $id_vacante, $id_reclutador);
 
     if (!mysqli_stmt_execute($stmt)) {
+        mysqli_rollback($con);
         reclutador_responder(false, "No se pudo eliminar la vacante.", null, 500);
     }
 
+    mysqli_commit($con);
     reclutador_responder(true, "Vacante eliminada");
 }
 
