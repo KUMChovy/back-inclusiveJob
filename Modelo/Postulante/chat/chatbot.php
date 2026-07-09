@@ -30,6 +30,8 @@ if (trim($mensaje) === "") {
     exit;
 }
 
+require_once __DIR__ . "/manual_chat.php";
+
 $apiKey = "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";
 $url = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -38,7 +40,7 @@ $datos = [
     "messages" => [
         [
             "role" => "system",
-            "content" => "Eres el chatbot de InclusiveJob. Ayudas a personas con discapacidad a encontrar empleo. Responde de forma clara, breve y util.",
+            "content" => obtenerContextoPostulante(),
         ],
         [
             "role" => "user",
