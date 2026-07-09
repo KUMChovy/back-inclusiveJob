@@ -37,6 +37,9 @@ if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
 }
 
 require_once __DIR__ . "/../../../Conexion.php";
+// Helper compartido con Postulante para guardar interacciones en `chabots`.
+// Ajusta esta ruta si chat_store.php terminó en otro lugar.
+require_once __DIR__ . "/../../Reclutador/chat/chat_store.php";
 
 // De momento se deja hardcodeada por decision del proyecto (igual que
 // en recomendar_vacantes.php). En produccion conviene moverla a .env.
@@ -408,7 +411,30 @@ if ($respuesta === null) {
     exit;
 }
 
-// 6.9 Respuesta exitosa
+// 6.9 Guardar la interaccion en `chabots` para el historial y responder.
+// Se abre una conexion nueva (la anterior ya se cerro en 6.6) para no
+// mantener una conexion a BD abierta mientras se espera a Groq.
+// Si falla el guardado, NO se rompe la respuesta al reclutador: solo
+// se registra el error.
+$conGuardar = conectarbd();
+mysqli_set_charset($conGuardar, "utf8mb4");
+try {
+    save_chat_interaction(
+        $conGuardar,
+        $id_usuario,
+        'chat_general',
+        $mensaje,
+        $respuesta,
+        'chat_general',
+        null,   // calificacion: aun no se usa
+        null    // archivo_cv: Reclutador no lo usa
+    );
+} catch (Throwable $e) {
+    error_log("[RECLUTADOR_CHAT_STORE] " . $e->getMessage());
+} finally {
+    mysqli_close($conGuardar);
+}
+
 registrarEventoChatbot("RESPUESTA_OK", "Respuesta generada correctamente", $mensaje, $id_usuario);
 
 echo $respuesta;
