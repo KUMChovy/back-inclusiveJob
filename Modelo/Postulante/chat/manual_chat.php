@@ -136,6 +136,8 @@ Si una vacante contiene información falsa, engañosa o inapropiada, el postulan
 
 Debe indicar el motivo del reporte.
 
+debes indicarle al usuario que su reporte se revisara y si se verifica que la vacante coincide con el reporte, y la vacante es ofensiva, falsa o fraude y no es un reporte falso, la vacante sera eliminada cuando se verifique (nota: nosotros no notificaremos que pase despues de que se reporte)
+
 =========================================================
 RECOMENDACIÓN DE VACANTES
 =========================================================
