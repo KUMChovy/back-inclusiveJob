@@ -43,7 +43,15 @@ if ($accion === "detalles_candidatos") {
         reclutador_responder(false, "ID de vacante requerido.", null, 400);
     }
 
-            $sql = "SELECT
+    // NUEVO: se agrega un LEFT JOIN a `chabots` para saber, por cada
+    // candidato, si ya realizo la ENTREVISTA REAL (la que se guarda desde
+    // entrevista_real.php con resultado = 'entrevista_real_realizada').
+    // Esa fila del postulante guarda en respuesta_ia (JSON) tanto
+    // vacante.id_vacante como evaluacion.puntuacion, asi que se extraen
+    // ambos con JSON_EXTRACT y se cruzan por id_usuario + id_vacante.
+    // No se toco ninguna columna ni JOIN existente, solo se agregaron
+    // entrevista_realizada y puntuacion_entrevista al SELECT.
+    $sql = "SELECT
                 p.id_postulacion,
                 COALESCE(p.estado, 'pendiente') AS estado_postulacion,
                 p.fecha_postulacion,
@@ -55,11 +63,21 @@ if ($accion === "detalles_candidatos") {
                 COALESCE(pos.descripcion_discapacidad, 'Sin resumen profesional registrado.') AS resumen_profesional,
                 COALESCE(pos.habilidades, 'No especificadas') AS habilidades,
                 COALESCE(pos.experiencia, 'Sin experiencia laboral registrada.') AS experiencia,
-                'No especificada' AS educacion
+                'No especificada' AS educacion,
+                (ce.id_usuario IS NOT NULL) AS entrevista_realizada,
+                ce.puntuacion_entrevista
             FROM postulaciones p
             INNER JOIN vacantes v ON p.id_vacante = v.id_vacante
             INNER JOIN postulantes pos ON p.id_postulante = pos.id_postulante
             INNER JOIN usuarios u ON pos.id_usuario = u.id_usuario
+            LEFT JOIN (
+                SELECT
+                    id_usuario,
+                    JSON_UNQUOTE(JSON_EXTRACT(respuesta_ia, '$.vacante.id_vacante')) AS id_vacante_ref,
+                    JSON_UNQUOTE(JSON_EXTRACT(respuesta_ia, '$.evaluacion.puntuacion')) AS puntuacion_entrevista
+                FROM chabots
+                WHERE resultado = 'entrevista_real_realizada'
+            ) ce ON ce.id_usuario = u.id_usuario AND ce.id_vacante_ref = v.id_vacante
             WHERE p.id_vacante = ? AND v.id_reclutador = ?";
     $stmt = mysqli_prepare($con, $sql);
     mysqli_stmt_bind_param($stmt, "ii", $id_vacante, $id_reclutador);
@@ -68,6 +86,10 @@ if ($accion === "detalles_candidatos") {
 
     $candidatos = [];
     while ($row = mysqli_fetch_assoc($res)) {
+        // NUEVO: normalizar tipos para que el frontend reciba boolean/int
+        // en vez de strings "0"/"1" o null crudo de MySQL.
+        $row["entrevista_realizada"] = (bool)(int)$row["entrevista_realizada"];
+        $row["puntuacion_entrevista"] = $row["puntuacion_entrevista"] !== null ? (int)$row["puntuacion_entrevista"] : null;
         $candidatos[] = $row;
     }
 
