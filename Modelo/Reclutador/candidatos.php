@@ -43,8 +43,9 @@ if ($accion === "detalles_candidatos") {
         reclutador_responder(false, "ID de vacante requerido.", null, 400);
     }
 
-    $sql = "SELECT
+            $sql = "SELECT
                 p.id_postulacion,
+                COALESCE(p.estado, 'pendiente') AS estado_postulacion,
                 p.fecha_postulacion,
                 u.id_usuario,
                 CONCAT(COALESCE(u.nombres, ''), ' ', COALESCE(u.apellidos, '')) AS nombre_completo,
@@ -71,6 +72,112 @@ if ($accion === "detalles_candidatos") {
     }
 
     reclutador_responder(true, "Candidatos obtenidos", $candidatos);
+}
+
+if ($accion === "listar_aceptados") {
+    $sql = "SELECT
+                v.id_vacante,
+                v.titulo_puesto,
+                v.modalidad,
+                v.estado AS estado_vacante,
+                p.id_postulacion,
+                p.fecha_postulacion,
+                COALESCE(p.estado, 'pendiente') AS estado_postulacion,
+                u.id_usuario,
+                CONCAT(COALESCE(u.nombres, ''), ' ', COALESCE(u.apellidos, '')) AS nombre_completo,
+                u.correo,
+                COALESCE(u.telefono, 'No especificado') AS telefono,
+                COALESCE(pos.cv, '') AS cv_url,
+                COALESCE(pos.descripcion_discapacidad, 'Sin resumen profesional registrado.') AS resumen_profesional,
+                COALESCE(pos.habilidades, 'No especificadas') AS habilidades,
+                COALESCE(pos.experiencia, 'Sin experiencia laboral registrada.') AS experiencia,
+                'No especificada' AS educacion
+            FROM vacantes v
+            LEFT JOIN postulaciones p
+                ON p.id_vacante = v.id_vacante
+               AND LOWER(COALESCE(p.estado, 'pendiente')) = 'aceptado'
+            LEFT JOIN postulantes pos ON p.id_postulante = pos.id_postulante
+            LEFT JOIN usuarios u ON pos.id_usuario = u.id_usuario
+            WHERE v.id_reclutador = ? AND v.estado != 'eliminada'
+            ORDER BY v.fecha_publicacion DESC, p.fecha_postulacion DESC";
+
+    $stmt = mysqli_prepare($con, $sql);
+    mysqli_stmt_bind_param($stmt, "i", $id_reclutador);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+
+    $vacantes = [];
+    while ($row = mysqli_fetch_assoc($res)) {
+        $id_vacante = (int)$row["id_vacante"];
+
+        if (!isset($vacantes[$id_vacante])) {
+            $vacantes[$id_vacante] = [
+                "id_vacante" => $id_vacante,
+                "titulo_puesto" => $row["titulo_puesto"],
+                "modalidad" => $row["modalidad"],
+                "estado" => $row["estado_vacante"],
+                "candidatos_aceptados" => []
+            ];
+        }
+
+        if (!empty($row["id_postulacion"])) {
+            $vacantes[$id_vacante]["candidatos_aceptados"][] = [
+                "id_postulacion" => (int)$row["id_postulacion"],
+                "fecha_postulacion" => $row["fecha_postulacion"],
+                "estado_postulacion" => $row["estado_postulacion"],
+                "id_usuario" => (int)$row["id_usuario"],
+                "nombre_completo" => $row["nombre_completo"],
+                "correo" => $row["correo"],
+                "telefono" => $row["telefono"],
+                "cv_url" => $row["cv_url"],
+                "resumen_profesional" => $row["resumen_profesional"],
+                "habilidades" => $row["habilidades"],
+                "experiencia" => $row["experiencia"],
+                "educacion" => $row["educacion"]
+            ];
+        }
+    }
+    mysqli_stmt_close($stmt);
+
+    reclutador_responder(true, "Candidatos aceptados obtenidos", array_values($vacantes));
+}
+
+if ($accion === "actualizar_estado_postulacion" && $_SERVER["REQUEST_METHOD"] === "POST") {
+    $data = reclutador_json_body();
+    $id_postulacion = (int)($data["id_postulacion"] ?? 0);
+    $estado = strtolower(trim($data["estado"] ?? ""));
+    $estados_validos = ["pendiente", "aceptado", "rechazado"];
+
+    if (!$id_postulacion || !in_array($estado, $estados_validos, true)) {
+        reclutador_responder(false, "Datos invalidos para actualizar la postulacion.", null, 400);
+    }
+
+    $sql_check = "SELECT p.id_postulacion
+                  FROM postulaciones p
+                  INNER JOIN vacantes v ON p.id_vacante = v.id_vacante
+                  WHERE p.id_postulacion = ? AND v.id_reclutador = ?
+                  LIMIT 1";
+    $stmt_check = mysqli_prepare($con, $sql_check);
+    mysqli_stmt_bind_param($stmt_check, "ii", $id_postulacion, $id_reclutador);
+    mysqli_stmt_execute($stmt_check);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_check));
+    mysqli_stmt_close($stmt_check);
+
+    if (!$row) {
+        reclutador_responder(false, "No se encontro la postulacion para tus vacantes.", null, 404);
+    }
+
+    $stmt = mysqli_prepare($con, "UPDATE postulaciones SET estado = ? WHERE id_postulacion = ?");
+    mysqli_stmt_bind_param($stmt, "si", $estado, $id_postulacion);
+
+    if (!mysqli_stmt_execute($stmt)) {
+        reclutador_responder(false, "No se pudo actualizar el estado de la postulacion.", null, 500);
+    }
+
+    reclutador_responder(true, "Estado de postulacion actualizado", [
+        "id_postulacion" => $id_postulacion,
+        "estado" => $estado
+    ]);
 }
 
 reclutador_responder(false, "Accion no valida en el modulo de candidatos.", null, 400);
