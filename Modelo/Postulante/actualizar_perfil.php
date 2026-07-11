@@ -110,8 +110,8 @@ if ($apellidos === "" || !preg_match($regexTexto, $apellidos)) {
 }
 
 // telefono: solo numeros, entre 7 y 9 digitos (ajusta segun tu pais)
-if ($telefono !== "" && !preg_match('/^[0-9]{7,9}$/', $telefono)) {
-    $errores[] = "El campo 'telefono' debe contener solo numeros (7 a 9 digitos).";
+if ($telefono !== "" && !preg_match('/^[0-9]{10}$/', $telefono)) {
+    $errores[] = "El campo 'telefono' debe contener 10 digitos.";
 }
 
 // esfuerzo_fisico_posible: numerico, dentro de un rango valido (0-1 o 1-5, ajusta segun tu escala)

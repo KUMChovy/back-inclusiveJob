@@ -9,6 +9,15 @@
 | una evaluacion estructurada en JSON y la guarda en `chabots` con
 | resultado = 'simular_entrevista', igual que se hace con analizar_cv y
 | recomendar_vacantes.
+|
+| NUEVO: ademas de guardar la evaluacion para el postulante, este endpoint
+| ahora tambien notifica al RECLUTADOR dueño de la vacante con la
+| calificacion real obtenida por el candidato. Se guarda una fila extra en
+| `chabots` usando el id_usuario del reclutador (mismo patron inverso que
+| ya usa solicitar_entrevista.php, que notifica al postulante usando el
+| id_usuario del reclutador). Este bloque esta aislado en su propio
+| try/catch para que, si algo falla ahi (vacante sin reclutador, error de
+| SQL, etc.), NO afecte la respuesta que ya se le dio al postulante.
 */
 
 session_set_cookie_params([
@@ -234,6 +243,71 @@ try {
         );
     } catch (Throwable $e) {
         error_log("[POSTULANTE_ENTREVISTA_FINALIZAR_SAVE] " . $e->getMessage());
+    }
+
+    // ── NUEVO: notificar al reclutador con la calificacion real ──────
+    // Bloque aislado en su propio try/catch: si algo falla aqui (p.ej. la
+    // vacante no tiene reclutador o hay un error de SQL), NO afecta la
+    // respuesta que ya se le dio al postulante arriba.
+    try {
+        $stmtRec = mysqli_prepare($con, "
+            SELECT r.id_usuario AS id_usuario_reclutador
+            FROM vacantes v
+            INNER JOIN reclutadores r ON r.id_reclutador = v.id_reclutador
+            WHERE v.id_vacante = ?
+            LIMIT 1
+        ");
+        if ($stmtRec === false) {
+            throw new RuntimeException("No se pudo preparar la consulta del reclutador: " . mysqli_error($con));
+        }
+        mysqli_stmt_bind_param($stmtRec, "i", $idVacante);
+        mysqli_stmt_execute($stmtRec);
+        $rowRec = mysqli_fetch_assoc(mysqli_stmt_get_result($stmtRec));
+        mysqli_stmt_close($stmtRec);
+
+        if ($rowRec && !empty($rowRec["id_usuario_reclutador"])) {
+            $idUsuarioReclutador = (int)$rowRec["id_usuario_reclutador"];
+
+            $stmtCand = mysqli_prepare($con, "
+                SELECT CONCAT(nombres, ' ', apellidos) AS nombre_completo
+                FROM usuarios
+                WHERE id_usuario = ?
+                LIMIT 1
+            ");
+            if ($stmtCand === false) {
+                throw new RuntimeException("No se pudo preparar la consulta del candidato: " . mysqli_error($con));
+            }
+            mysqli_stmt_bind_param($stmtCand, "i", $idUsuario);
+            mysqli_stmt_execute($stmtCand);
+            $rowCand = mysqli_fetch_assoc(mysqli_stmt_get_result($stmtCand));
+            mysqli_stmt_close($stmtCand);
+
+            $nombreCandidato = $rowCand["nombre_completo"] ?? "Un candidato";
+
+            $textoParaReclutador = "🎯 {$nombreCandidato} completo la entrevista simulada para \"{$vacante['titulo_puesto']}\" con una calificacion de {$evaluacion['puntuacion']}/10.";
+
+            save_chat_interaction(
+                $con,
+                $idUsuarioReclutador,
+                "entrevista_completada",
+                "Entrevista simulada completada por un postulante",
+                json_encode([
+                    "text" => $textoParaReclutador,
+                    "candidato" => [
+                        "nombre_completo" => $nombreCandidato,
+                    ],
+                    "vacante" => [
+                        "id_vacante" => $vacante["id_vacante"],
+                        "titulo_puesto" => $vacante["titulo_puesto"],
+                    ],
+                    "evaluacion" => $evaluacion,
+                ], JSON_UNESCAPED_UNICODE),
+                "entrevista_completada",
+                $evaluacion["puntuacion"]
+            );
+        }
+    } catch (Throwable $e) {
+        error_log("[POSTULANTE_ENTREVISTA_FINALIZAR_NOTIFICAR_RECLUTADOR] " . $e->getMessage());
     }
 
     mysqli_close($con);
