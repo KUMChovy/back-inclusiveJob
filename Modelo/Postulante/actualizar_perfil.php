@@ -99,14 +99,20 @@ $porcentaje = trim((string)($_POST["porcentaje"] ?? ""));
 $errores = [];
 
 // nombres y apellidos: solo letras (incluye tildes/ñ) y espacios
+// La columna usuarios.nombres / usuarios.apellidos es varchar(150),
+// por eso limitamos tambien la longitud maxima.
 $regexTexto = '/^[A-Za-zÀ-ÖØ-öø-ÿÑñ\s]+$/u';
 
 if ($nombres === "" || !preg_match($regexTexto, $nombres)) {
     $errores[] = "El campo 'nombres' solo debe contener letras.";
+} elseif (mb_strlen($nombres) > 150) {
+    $errores[] = "El campo 'nombres' no debe superar 150 caracteres.";
 }
 
 if ($apellidos === "" || !preg_match($regexTexto, $apellidos)) {
     $errores[] = "El campo 'apellidos' solo debe contener letras.";
+} elseif (mb_strlen($apellidos) > 150) {
+    $errores[] = "El campo 'apellidos' no debe superar 150 caracteres.";
 }
 
 // telefono: solo numeros, entre 7 y 9 digitos (ajusta segun tu pais)
