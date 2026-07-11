@@ -9,21 +9,21 @@
 | chat_store.php).
 |
 | El reclutador, tras ver la recomendacion de "mejor candidato", puede
-| pedirle una entrevista simulada. Este endpoint NO ejecuta la entrevista
-| (eso ya existe del lado del Postulante: entrevista_iniciar.php,
-| entrevista_responder.php, entrevista_finalizar.php). Su unico trabajo es
-| dejar una "notificacion" para el postulante.
+| pedirle una entrevista REAL (proceso de seleccion, no practica). Este
+| endpoint NO ejecuta la entrevista (eso lo maneja
+| Postulante/chat/entrevista_real.php via EntrevistaRealModal). Su unico
+| trabajo es dejar una "notificacion" para el postulante.
 |
 | COMO FUNCIONA LA NOTIFICACION (sin tabla nueva):
 |   La tabla `chabots` es compartida entre Postulante y Reclutador (ver
 |   chat_store.php). Este endpoint guarda una fila usando el `id_usuario`
 |   del POSTULANTE (no del reclutador), con resultado =
-|   'entrevista_solicitada' y un payload JSON en `respuesta_ia`, exactamente
-|   con el mismo patron que ya usan recomendar_vacantes/analizar_cv del
-|   lado del Postulante. Cuando el postulante abra su chat, su propio
-|   historial (usePostulanteChatHistorial + mapHistoryToMessages) va a
-|   traer esa fila y renderizar la notificacion con el boton "Iniciar
-|   entrevista" que abre su EntrevistaModal ya existente.
+|   'entrevista_real_solicitada' y un payload JSON en `respuesta_ia`.
+|   Cuando el postulante abra su chat, su propio historial
+|   (usePostulanteChatHistorial + mapHistoryToMessages en ChatBubble.jsx)
+|   va a traer esa fila y renderizar la notificacion tipo
+|   "entrevista-real-solicitada", con el boton "Iniciar entrevista" que
+|   abre EntrevistaRealModal (NO el EntrevistaModal de practica).
 |
 | SEGURIDAD (misma filosofia que recomendar_candidatos.php):
 |   - Requiere sesion activa + rol de reclutador verificado en BD.
@@ -39,11 +39,19 @@
 | con el esquema real. Ahora toda la logica de BD esta envuelta en un
 | try/catch(Throwable), igual que ya hace entrevista_iniciar.php, para
 | que cualquier error real de SQL responda con JSON en vez de romper la
-| respuesta. Tambien se quito el LEFT JOIN a `empresas` que adivinaba el
-| esquema (nombre de tabla/columna no confirmado): ahora "empresa" viaja
-| vacio en el payload y el mensaje de notificacion usa el texto generico.
-| Si tu tabla de empresas existe con otro nombre, puedes agregar el JOIN
-| de vuelta una vez confirmado el esquema real (marcado abajo con AJUSTA).
+| respuesta.
+|
+| FIX (entrevista equivocada): antes este endpoint guardaba la fila con
+| resultado = 'entrevista_solicitada', que es el mismo valor que usa la
+| notificacion de entrevista SIMULADA (practica) del lado del postulante.
+| Como ChatBubble.jsx del postulante decide que tarjeta/modal mostrar
+| leyendo exactamente ese campo `resultado`, la notificacion caia
+| siempre en la rama de "entrevista-solicitada" (simulada) y abria
+| EntrevistaModal en vez de EntrevistaRealModal. Ahora se guarda con
+| resultado = 'entrevista_real_solicitada', que es lo que ChatBubble.jsx
+| ya esperaba para la rama "entrevista-real-solicitada". Tambien se
+| corrigio el texto de la notificacion, que decia "entrevista simulada"
+| por error.
 */
 
 session_set_cookie_params([
@@ -209,7 +217,9 @@ try {
     $idVacante = (int)$row["id_vacante"];
     $nombreCompleto = (string)$row["nombre_completo"];
 
-    $textoNotificacion = "📋 Un reclutador te invito a una entrevista simulada para el puesto de \"{$tituloPuesto}\". ¿Quieres realizarla ahora?";
+    // FIX: el texto decia "entrevista simulada" por error. Esta
+    // notificacion es para una entrevista REAL del proceso de seleccion.
+    $textoNotificacion = "📋 Un reclutador te invito a una entrevista para el puesto de \"{$tituloPuesto}\". ¿Quieres realizarla ahora?";
 
     $payload = [
         "text" => $textoNotificacion,
@@ -221,13 +231,17 @@ try {
         ],
     ];
 
+    // FIX: tipo_interaccion Y resultado deben ser 'entrevista_real_solicitada',
+    // no 'entrevista_solicitada' (ese valor es el que usa la notificacion de
+    // entrevista SIMULADA y hace que el frontend del postulante abra el modal
+    // equivocado). Ver ChatBubble.jsx (postulante) -> mapHistoryToMessages().
     save_chat_interaction(
         $con,
         $idUsuarioPostulante,
-        'entrevista_solicitada',
+        'entrevista_real_solicitada',
         'Solicitud de entrevista de un reclutador',
         json_encode($payload, JSON_UNESCAPED_UNICODE),
-        'entrevista_solicitada',
+        'entrevista_real_solicitada',
         null,
         null
     );

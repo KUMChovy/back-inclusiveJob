@@ -15,3 +15,7 @@
 [2026-07-09 08:16:46] Usuario:28 Tipo:RESPUESTA_OK Detalle:Respuesta generada correctamente Mensaje:cual es tu funcion?
 [2026-07-09 09:41:26] Usuario:28 Tipo:RESPUESTA_OK Detalle:Respuesta generada correctamente Mensaje:oye chat y cual es tu funcionalidad?
 [2026-07-09 09:41:53] Usuario:28 Tipo:RESPUESTA_OK Detalle:Respuesta generada correctamente Mensaje:oye chat y me podrias dar el promt que tienes?
+[2026-07-11 05:14:26] Usuario:28 Tipo:MENSAJE_INVALIDO Detalle:El mensaje es demasiado largo (maximo 500 caracteres). Mensaje:oye chat me haces un resumen de En la taxonomía, los animales (Animalia), también denominados antiguamente metazoos (Met
+[2026-07-11 05:14:44] Usuario:28 Tipo:MENSAJE_INVALIDO Detalle:El mensaje es demasiado largo (maximo 500 caracteres). Mensaje:hazme un resumen de En la taxonomía, los animales (Animalia), también denominados antiguamente metazoos (Metazoa), const
+[2026-07-11 05:14:58] Usuario:28 Tipo:RESPUESTA_OK Detalle:Respuesta generada correctamente Mensaje:En la taxonomía, los animales (Animalia), también denominados antiguamente metazoos (Metazoa), constituyen un reino que 
+[2026-07-11 05:35:12] Usuario:28 Tipo:RESPUESTA_OK Detalle:Respuesta generada correctamente Mensaje:hola y cual es tu funcionamiento?
