@@ -146,6 +146,57 @@ function vacante_pertenece_reclutador($con, $id_vacante, $id_reclutador) {
     return (bool)$row;
 }
 
+function vacante_validar_salarios($salario_min_raw, $salario_max_raw) {
+    if ($salario_min_raw === '' || $salario_max_raw === '' || $salario_min_raw === null || $salario_max_raw === null) {
+        reclutador_responder(false, 'El salario debe estar entre $1,000 y $1,000,000 pesos.', null, 400);
+    }
+
+    if (!is_numeric($salario_min_raw) || !is_numeric($salario_max_raw)) {
+        reclutador_responder(false, 'El salario debe estar entre $1,000 y $1,000,000 pesos.', null, 400);
+    }
+
+    $salario_min = (float)$salario_min_raw;
+    $salario_max = (float)$salario_max_raw;
+
+    if ($salario_min < 1000 || $salario_min > 1000000 || $salario_max < 1000 || $salario_max > 1000000) {
+        reclutador_responder(false, 'El salario debe estar entre $1,000 y $1,000,000 pesos.', null, 400);
+    }
+
+    if ($salario_min > $salario_max) {
+        reclutador_responder(false, 'El salario maximo debe ser mayor o igual al salario minimo.', null, 400);
+    }
+
+    return [$salario_min, $salario_max];
+}
+
+function vacante_fecha_valida($fecha) {
+    if (!is_string($fecha) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+        return false;
+    }
+
+    $dt = DateTime::createFromFormat('!Y-m-d', $fecha);
+    return $dt && $dt->format('Y-m-d') === $fecha;
+}
+
+function vacante_validar_fechas($fecha_publicacion_raw, $fecha_cierre_raw) {
+    $fecha_publicacion = trim((string)$fecha_publicacion_raw);
+    $fecha_cierre = trim((string)$fecha_cierre_raw);
+
+    if ($fecha_publicacion === '' || $fecha_cierre === '') {
+        reclutador_responder(false, 'La fecha de publicacion y la fecha de cierre son obligatorias.', null, 400);
+    }
+
+    if (!vacante_fecha_valida($fecha_publicacion) || !vacante_fecha_valida($fecha_cierre)) {
+        reclutador_responder(false, 'Las fechas de la vacante no tienen un formato valido.', null, 400);
+    }
+
+    if ($fecha_publicacion > $fecha_cierre) {
+        reclutador_responder(false, 'La fecha de cierre debe ser posterior a la fecha de publicacion.', null, 400);
+    }
+
+    return [$fecha_publicacion . ' 00:00:00', $fecha_cierre];
+}
+
 if ($accion === "listar") {
     $sql = "SELECT id_vacante, titulo_puesto, descripcion_puesto, requisitos, modalidad,
                    salario_min, salario_max, estado, fecha_publicacion, fecha_cierre, id_reclutador
@@ -173,11 +224,13 @@ if (($accion === "insertar" || $accion === "guardar") && $_SERVER["REQUEST_METHO
     $descripcion = trim($data["descripcion_puesto"] ?? "");
     $requisitos = trim($data["requisitos"] ?? "");
     $modalidad = trim($data["modalidad"] ?? "Presencial");
-    $salario_min = ($data["salario_min"] ?? "") !== "" ? (float)$data["salario_min"] : 0;
-    $salario_max = ($data["salario_max"] ?? "") !== "" ? (float)$data["salario_max"] : 0;
+    $salarios = vacante_validar_salarios($data["salario_min"] ?? null, $data["salario_max"] ?? null);
+    $salario_min = $salarios[0];
+    $salario_max = $salarios[1];
     $estado = trim($data["estado"] ?? "activa");
-    $fecha_cierre = trim($data["fecha_cierre"] ?? "");
-    $fecha_cierre = $fecha_cierre !== "" ? $fecha_cierre : null;
+    $fechas = vacante_validar_fechas($data["fecha_publicacion"] ?? "", $data["fecha_cierre"] ?? "");
+    $fecha_publicacion = $fechas[0];
+    $fecha_cierre = $fechas[1];
     $discapacidades = vacante_validar_discapacidades($con, vacante_discapacidad_ids($data['discapacidades'] ?? []));
 
     if ($titulo === "") {
@@ -188,9 +241,9 @@ if (($accion === "insertar" || $accion === "guardar") && $_SERVER["REQUEST_METHO
 
     $sql = "INSERT INTO vacantes
                 (titulo_puesto, descripcion_puesto, requisitos, modalidad, salario_min, salario_max, estado, fecha_publicacion, fecha_cierre, id_reclutador)
-            VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)";
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     $stmt = mysqli_prepare($con, $sql);
-    mysqli_stmt_bind_param($stmt, "ssssddssi", $titulo, $descripcion, $requisitos, $modalidad, $salario_min, $salario_max, $estado, $fecha_cierre, $id_reclutador);
+    mysqli_stmt_bind_param($stmt, "ssssddsssi", $titulo, $descripcion, $requisitos, $modalidad, $salario_min, $salario_max, $estado, $fecha_publicacion, $fecha_cierre, $id_reclutador);
 
     if (!mysqli_stmt_execute($stmt)) {
         mysqli_rollback($con);
@@ -215,11 +268,13 @@ if ($accion === "editar" && $_SERVER["REQUEST_METHOD"] === "POST") {
     $descripcion = trim($data["descripcion_puesto"] ?? "");
     $requisitos = trim($data["requisitos"] ?? "");
     $modalidad = trim($data["modalidad"] ?? "Presencial");
-    $salario_min = ($data["salario_min"] ?? "") !== "" ? (float)$data["salario_min"] : 0;
-    $salario_max = ($data["salario_max"] ?? "") !== "" ? (float)$data["salario_max"] : 0;
+    $salarios = vacante_validar_salarios($data["salario_min"] ?? null, $data["salario_max"] ?? null);
+    $salario_min = $salarios[0];
+    $salario_max = $salarios[1];
     $estado = trim($data["estado"] ?? "activa");
-    $fecha_cierre = trim($data["fecha_cierre"] ?? "");
-    $fecha_cierre = $fecha_cierre !== "" ? $fecha_cierre : null;
+    $fechas = vacante_validar_fechas($data["fecha_publicacion"] ?? "", $data["fecha_cierre"] ?? "");
+    $fecha_publicacion = $fechas[0];
+    $fecha_cierre = $fechas[1];
     $discapacidades = vacante_validar_discapacidades($con, vacante_discapacidad_ids($data['discapacidades'] ?? []));
 
     if (!$id_vacante || $titulo === "") {
@@ -234,10 +289,10 @@ if ($accion === "editar" && $_SERVER["REQUEST_METHOD"] === "POST") {
 
     $sql = "UPDATE vacantes
             SET titulo_puesto = ?, descripcion_puesto = ?, requisitos = ?, modalidad = ?,
-                salario_min = ?, salario_max = ?, estado = ?, fecha_cierre = ?
+                salario_min = ?, salario_max = ?, estado = ?, fecha_publicacion = ?, fecha_cierre = ?
             WHERE id_vacante = ? AND id_reclutador = ?";
     $stmt = mysqli_prepare($con, $sql);
-    mysqli_stmt_bind_param($stmt, "ssssddssii", $titulo, $descripcion, $requisitos, $modalidad, $salario_min, $salario_max, $estado, $fecha_cierre, $id_vacante, $id_reclutador);
+    mysqli_stmt_bind_param($stmt, "ssssddsssii", $titulo, $descripcion, $requisitos, $modalidad, $salario_min, $salario_max, $estado, $fecha_publicacion, $fecha_cierre, $id_vacante, $id_reclutador);
 
     if (!mysqli_stmt_execute($stmt)) {
         mysqli_rollback($con);
