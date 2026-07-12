@@ -145,6 +145,25 @@ function normalize_postulacion(array $row): array
     return $row;
 }
 
+function pdf_available(mixed $value): bool
+{
+    if ($value === null || $value === '') return false;
+    $content = (string)$value;
+    if (str_starts_with($content, '%PDF')) return true;
+    if (!str_starts_with($content, 'uploads/')) return false;
+
+    $path = realpath(__DIR__ . '/../../' . $content);
+    $base = realpath(__DIR__ . '/../../uploads');
+    if (!$path || !$base || !str_starts_with($path, $base) || !is_file($path)) return false;
+
+    $handle = fopen($path, 'rb');
+    if (!$handle) return false;
+    $signature = fread($handle, 4);
+    fclose($handle);
+
+    return $signature === '%PDF';
+}
+
 $accion = $_GET['accion'] ?? '';
 
 if (!table_exists($con, 'postulaciones')) {
@@ -238,9 +257,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'detalle') {
     $certificaciones = [];
 
     if ($postulacion['id_postulante'] && table_exists($con, 'postulantes')) {
-        $postulante = fetch_one($con, 'SELECT * FROM postulantes WHERE id_postulante = ?', 'i', (int)$postulacion['id_postulante']);
+        $postulante = fetch_one($con, '
+            SELECT id_postulante,
+                   descripcion_discapacidad,
+                   esfuerzo_fisico_posible,
+                   experiencia,
+                   habilidades,
+                   cv,
+                   portafolio_url,
+                   id_usuario
+            FROM postulantes
+            WHERE id_postulante = ?
+        ', 'i', (int)$postulacion['id_postulante']);
     } elseif ($postulacion['id_usuario'] && table_exists($con, 'postulantes')) {
-        $postulante = fetch_one($con, 'SELECT * FROM postulantes WHERE id_usuario = ?', 'i', (int)$postulacion['id_usuario']);
+        $postulante = fetch_one($con, '
+            SELECT id_postulante,
+                   descripcion_discapacidad,
+                   esfuerzo_fisico_posible,
+                   experiencia,
+                   habilidades,
+                   cv,
+                   portafolio_url,
+                   id_usuario
+            FROM postulantes
+            WHERE id_usuario = ?
+        ', 'i', (int)$postulacion['id_usuario']);
+    }
+    if ($postulante) {
+        $postulante['tiene_cv'] = pdf_available($postulante['cv'] ?? null) ? 1 : 0;
+        unset($postulante['cv']);
     }
 
     if ($postulacion['id_vacante'] && table_exists($con, 'vacantes')) {
@@ -260,7 +305,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'detalle') {
         $certCol = first_column($con, 'certificaciones', ['id_postulante', 'id_usuario']);
         if ($certCol) {
             $value = $certCol === 'id_postulante' ? (int)$idPostulante : (int)$idUsuario;
-            $certificaciones = fetch_all($con, "SELECT * FROM certificaciones WHERE `$certCol` = ? ORDER BY 1 DESC LIMIT 10", 'i', $value);
+            $certificaciones = fetch_all($con, "
+                SELECT id_certificaciones,
+                       nombre_certificacion,
+                       institucion_dada,
+                       fecha_emitido,
+                       id_postulante,
+                       pdf
+                FROM certificaciones
+                WHERE `$certCol` = ?
+                ORDER BY fecha_emitido DESC, id_certificaciones DESC
+                LIMIT 10
+            ", 'i', $value);
+            foreach ($certificaciones as &$certificacion) {
+                $certificacion['tiene_pdf'] = pdf_available($certificacion['pdf'] ?? null) ? 1 : 0;
+                unset($certificacion['pdf']);
+            }
+            unset($certificacion);
         }
     }
 

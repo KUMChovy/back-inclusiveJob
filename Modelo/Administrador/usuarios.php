@@ -80,6 +80,59 @@ function fetch_all(mysqli $con, string $sql, string $types = '', mixed ...$param
     return $rows;
 }
 
+function output_pdf(mixed $value, string $filename = 'documento.pdf'): void
+{
+    if ($value === null || $value === '') {
+        http_response_code(404);
+        echo 'PDF no encontrado.';
+        exit;
+    }
+
+    $content = (string)$value;
+    if (str_starts_with($content, 'uploads/')) {
+        $path = realpath(__DIR__ . '/../../' . $content);
+        $base = realpath(__DIR__ . '/../../uploads');
+        if (!$path || !$base || !str_starts_with($path, $base) || !is_file($path)) {
+            http_response_code(404);
+            echo 'PDF no encontrado.';
+            exit;
+        }
+        $content = file_get_contents($path);
+    }
+
+    if (!str_starts_with($content, '%PDF')) {
+        http_response_code(415);
+        echo 'El documento guardado no parece ser un PDF valido.';
+        exit;
+    }
+
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="' . addslashes($filename) . '"');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    header('Pragma: no-cache');
+    echo $content;
+    exit;
+}
+
+function pdf_available(mixed $value): bool
+{
+    if ($value === null || $value === '') return false;
+    $content = (string)$value;
+    if (str_starts_with($content, '%PDF')) return true;
+    if (!str_starts_with($content, 'uploads/')) return false;
+
+    $path = realpath(__DIR__ . '/../../' . $content);
+    $base = realpath(__DIR__ . '/../../uploads');
+    if (!$path || !$base || !str_starts_with($path, $base) || !is_file($path)) return false;
+
+    $handle = fopen($path, 'rb');
+    if (!$handle) return false;
+    $signature = fread($handle, 4);
+    fclose($handle);
+
+    return $signature === '%PDF';
+}
+
 function normalize_usuario(array $usuario): array
 {
     $rolMap = [1 => 'administrador', 2 => 'postulante', 3 => 'reclutador'];
@@ -111,6 +164,28 @@ $estadoNumerico = estado_column_is_numeric($con);
 $fechaExpr = 'NULL';
 $fechaCol = first_column($con, 'usuarios', ['fecha_registro', 'created_at', 'fecha_creacion']);
 if ($fechaCol) $fechaExpr = "u.`$fechaCol`";
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'cv') {
+    $id = (int)($_GET['id'] ?? 0);
+    if (!$id) responder(false, 'ID requerido.', null, 400);
+    if (!table_exists($con, 'postulantes') || !column_exists($con, 'postulantes', 'cv')) {
+        responder(false, 'No existe el campo CV.', null, 404);
+    }
+
+    $row = fetch_one($con, 'SELECT cv FROM postulantes WHERE id_usuario = ? LIMIT 1', 'i', $id);
+    output_pdf($row['cv'] ?? null, 'cv_usuario_' . $id . '.pdf');
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'certificacion_pdf') {
+    $id = (int)($_GET['id'] ?? 0);
+    if (!$id) responder(false, 'ID requerido.', null, 400);
+    if (!table_exists($con, 'certificaciones') || !column_exists($con, 'certificaciones', 'pdf')) {
+        responder(false, 'No existe el campo PDF.', null, 404);
+    }
+
+    $row = fetch_one($con, 'SELECT pdf FROM certificaciones WHERE id_certificaciones = ? LIMIT 1', 'i', $id);
+    output_pdf($row['pdf'] ?? null, 'certificacion_' . $id . '.pdf');
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'listar') {
     $rol = $_GET['rol'] ?? 'todos';
@@ -239,13 +314,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'detalle') {
     $vacantes = [];
 
     if ((int)$usuario['id_rol'] === 2 && table_exists($con, 'postulantes')) {
-        $postulante = fetch_one($con, 'SELECT * FROM postulantes WHERE id_usuario = ?', 'i', $id);
+        $postulante = fetch_one($con, '
+            SELECT id_postulante,
+                   descripcion_discapacidad,
+                   esfuerzo_fisico_posible,
+                   experiencia,
+                   habilidades,
+                   cv,
+                   portafolio_url,
+                   id_usuario
+            FROM postulantes
+            WHERE id_usuario = ?
+        ', 'i', $id);
+        if ($postulante) {
+            $postulante['tiene_cv'] = pdf_available($postulante['cv'] ?? null) ? 1 : 0;
+            unset($postulante['cv']);
+        }
         $idPostulante = $postulante['id_postulante'] ?? null;
 
         if ($idPostulante && table_exists($con, 'certificaciones')) {
             $certCol = first_column($con, 'certificaciones', ['id_postulante', 'id_usuario']);
             if ($certCol) {
-                $certificaciones = fetch_all($con, "SELECT * FROM certificaciones WHERE `$certCol` = ? ORDER BY 1 DESC LIMIT 10", 'i', $certCol === 'id_postulante' ? (int)$idPostulante : $id);
+                $certificaciones = fetch_all($con, "
+                    SELECT id_certificaciones,
+                           nombre_certificacion,
+                           institucion_dada,
+                           fecha_emitido,
+                           id_postulante,
+                           pdf
+                    FROM certificaciones
+                    WHERE `$certCol` = ?
+                    ORDER BY fecha_emitido DESC, id_certificaciones DESC
+                    LIMIT 10
+                ", 'i', $certCol === 'id_postulante' ? (int)$idPostulante : $id);
+                foreach ($certificaciones as &$certificacion) {
+                    $certificacion['tiene_pdf'] = pdf_available($certificacion['pdf'] ?? null) ? 1 : 0;
+                    unset($certificacion['pdf']);
+                }
+                unset($certificacion);
             }
         }
 
@@ -288,9 +394,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'detalle') {
     }
 
     if ((int)$usuario['id_rol'] === 3 && table_exists($con, 'reclutadores')) {
+        $uEmpresa = column_exists($con, 'usuarios', 'empresa') ? 'u.empresa' : 'NULL';
+        $uPuesto = column_exists($con, 'usuarios', 'puesto') ? 'u.puesto' : 'NULL';
+        $uSector = column_exists($con, 'usuarios', 'sector') ? 'u.sector' : 'NULL';
+        $uValidada = column_exists($con, 'usuarios', 'empresa_validada') ? 'u.empresa_validada' : 'NULL';
         $reclutador = fetch_one($con, "
-            SELECT r.*, e.nombre_empresas, e.correo_empresa, e.estado_validacion
+            SELECT
+                r.id_reclutador,
+                r.id_usuario,
+                r.id_empresas,
+                COALESCE(NULLIF(r.puesto, ''), $uPuesto, 'Reclutador') AS puesto,
+                COALESCE(e.nombre_empresas, $uEmpresa, '') AS nombre_empresas,
+                COALESCE(e.nombre_empresas, $uEmpresa, '') AS empresa,
+                COALESCE($uSector, '') AS sector,
+                e.correo_empresa,
+                e.estado_validacion,
+                COALESCE(e.estado_validacion, $uValidada, 0) AS empresa_validada
             FROM reclutadores r
+            LEFT JOIN usuarios u ON u.id_usuario = r.id_usuario
             LEFT JOIN empresas e ON e.id_empresas = r.id_empresas
             WHERE r.id_usuario = ?
         ", 'i', $id);
