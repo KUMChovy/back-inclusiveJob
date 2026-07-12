@@ -9,6 +9,155 @@ $id_usuario = reclutador_usuario_id();
 $id_reclutador = reclutador_id_desde_usuario($con, $id_usuario);
 $accion = $_GET["accion"] ?? "";
 
+function candidato_pdf_disponible($contenido) {
+    if ($contenido === null || $contenido === '') {
+        return false;
+    }
+
+    $contenido = (string)$contenido;
+    if (strncmp($contenido, '%PDF', 4) === 0) {
+        return true;
+    }
+
+    if (strpos($contenido, 'uploads/') !== 0) {
+        return false;
+    }
+
+    $path = realpath(__DIR__ . '/../../' . $contenido);
+    $base = realpath(__DIR__ . '/../../uploads');
+    if (!$path || !$base || strpos($path, $base) !== 0 || !is_file($path)) {
+        return false;
+    }
+
+    $handle = fopen($path, 'rb');
+    if (!$handle) return false;
+    $signature = fread($handle, 4);
+    fclose($handle);
+
+    return $signature === '%PDF';
+}
+
+function candidato_output_pdf($contenido, $filename) {
+    if (!candidato_pdf_disponible($contenido)) {
+        reclutador_responder(false, 'El CV no esta disponible como PDF.', null, 404);
+    }
+
+    $contenido = (string)$contenido;
+    if (strpos($contenido, 'uploads/') === 0) {
+        $path = realpath(__DIR__ . '/../../' . $contenido);
+        $base = realpath(__DIR__ . '/../../uploads');
+        if (!$path || !$base || strpos($path, $base) !== 0 || !is_file($path)) {
+            reclutador_responder(false, 'El PDF no esta disponible.', null, 404);
+        }
+        $contenido = file_get_contents($path);
+    }
+
+    if (ob_get_length()) {
+        ob_clean();
+    }
+
+    header_remove('Content-Type');
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="' . $filename . '"');
+    header('Content-Length: ' . strlen($contenido));
+    echo $contenido;
+    exit;
+}
+
+function candidato_certificaciones($con, $id_postulante) {
+    $stmt = mysqli_prepare($con, "SELECT
+            id_certificaciones,
+            nombre_certificacion,
+            institucion_dada,
+            fecha_emitido,
+            pdf
+        FROM certificaciones
+        WHERE id_postulante = ?
+        ORDER BY fecha_emitido DESC, id_certificaciones DESC
+        LIMIT 10");
+    mysqli_stmt_bind_param($stmt, "i", $id_postulante);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+
+    $certificaciones = [];
+    while ($row = mysqli_fetch_assoc($res)) {
+        $row["id_certificaciones"] = (int)$row["id_certificaciones"];
+        $row["id_certificacion"] = $row["id_certificaciones"];
+        $row["tiene_pdf"] = candidato_pdf_disponible($row["pdf"] ?? null) ? 1 : 0;
+        unset($row["pdf"]);
+        $certificaciones[] = $row;
+    }
+    mysqli_stmt_close($stmt);
+
+    return $certificaciones;
+}
+
+function candidato_discapacidades($con, $id_postulante) {
+    $stmt = mysqli_prepare($con, "SELECT
+            td.id_tipo_discapacidad AS id_discapacidad,
+            td.nombre_discapacidad AS nombre,
+            td.descripcion
+        FROM postulante_discapacidad pd
+        INNER JOIN tipo_discapacidad td ON td.id_tipo_discapacidad = pd.id_tipo_discapacidad
+        WHERE pd.id_postulante = ?
+        ORDER BY td.nombre_discapacidad ASC");
+    mysqli_stmt_bind_param($stmt, "i", $id_postulante);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+
+    $discapacidades = [];
+    while ($row = mysqli_fetch_assoc($res)) {
+        $row["id_discapacidad"] = (int)$row["id_discapacidad"];
+        $discapacidades[] = $row;
+    }
+    mysqli_stmt_close($stmt);
+
+    return $discapacidades;
+}
+
+if ($accion === "cv") {
+    $id_postulacion = (int)($_GET["id_postulacion"] ?? 0);
+
+    if (!$id_postulacion) {
+        reclutador_responder(false, "ID de postulacion requerido.", null, 400);
+    }
+
+    $stmt = mysqli_prepare($con, "SELECT pos.cv
+        FROM postulaciones p
+        INNER JOIN vacantes v ON p.id_vacante = v.id_vacante
+        INNER JOIN postulantes pos ON p.id_postulante = pos.id_postulante
+        WHERE p.id_postulacion = ? AND v.id_reclutador = ?
+        LIMIT 1");
+    mysqli_stmt_bind_param($stmt, "ii", $id_postulacion, $id_reclutador);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+
+    candidato_output_pdf($row["cv"] ?? null, "cv_postulacion_" . $id_postulacion . ".pdf");
+}
+
+if ($accion === "certificacion_pdf") {
+    $id_certificacion = (int)($_GET["id_certificacion"] ?? $_GET["id"] ?? 0);
+
+    if (!$id_certificacion) {
+        reclutador_responder(false, "ID de certificacion requerido.", null, 400);
+    }
+
+    $stmt = mysqli_prepare($con, "SELECT c.pdf
+        FROM certificaciones c
+        INNER JOIN postulantes pos ON c.id_postulante = pos.id_postulante
+        INNER JOIN postulaciones p ON p.id_postulante = pos.id_postulante
+        INNER JOIN vacantes v ON p.id_vacante = v.id_vacante
+        WHERE c.id_certificaciones = ? AND v.id_reclutador = ?
+        LIMIT 1");
+    mysqli_stmt_bind_param($stmt, "ii", $id_certificacion, $id_reclutador);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+
+    candidato_output_pdf($row["pdf"] ?? null, "certificacion_" . $id_certificacion . ".pdf");
+}
+
 if ($accion === "listar_por_vacante") {
     $sql = "SELECT
                 v.id_vacante,
@@ -56,10 +205,19 @@ if ($accion === "detalles_candidatos") {
                 COALESCE(p.estado, 'pendiente') AS estado_postulacion,
                 p.fecha_postulacion,
                 u.id_usuario,
+                u.nombres,
+                u.apellidos,
                 CONCAT(COALESCE(u.nombres, ''), ' ', COALESCE(u.apellidos, '')) AS nombre_completo,
                 u.correo,
                 COALESCE(u.telefono, 'No especificado') AS telefono,
-                COALESCE(pos.cv, '') AS cv_url,
+                u.foto_perfil,
+                u.estado AS estado_usuario,
+                u.fecha_registro,
+                pos.id_postulante,
+                pos.descripcion_discapacidad,
+                pos.esfuerzo_fisico_posible,
+                pos.portafolio_url,
+                pos.cv AS cv_pdf,
                 COALESCE(pos.descripcion_discapacidad, 'Sin resumen profesional registrado.') AS resumen_profesional,
                 COALESCE(pos.habilidades, 'No especificadas') AS habilidades,
                 COALESCE(pos.experiencia, 'Sin experiencia laboral registrada.') AS experiencia,
@@ -73,10 +231,18 @@ if ($accion === "detalles_candidatos") {
             LEFT JOIN (
                 SELECT
                     id_usuario,
-                    JSON_UNQUOTE(JSON_EXTRACT(respuesta_ia, '$.vacante.id_vacante')) AS id_vacante_ref,
-                    JSON_UNQUOTE(JSON_EXTRACT(respuesta_ia, '$.evaluacion.puntuacion')) AS puntuacion_entrevista
-                FROM chabots
-                WHERE resultado = 'entrevista_real_realizada'
+                    id_vacante_ref,
+                    MAX(CAST(puntuacion_entrevista AS UNSIGNED)) AS puntuacion_entrevista
+                FROM (
+                    SELECT
+                        id_usuario,
+                        JSON_UNQUOTE(JSON_EXTRACT(respuesta_ia, '$.vacante.id_vacante')) AS id_vacante_ref,
+                        JSON_UNQUOTE(JSON_EXTRACT(respuesta_ia, '$.evaluacion.puntuacion')) AS puntuacion_entrevista
+                    FROM chabots
+                    WHERE resultado = 'entrevista_real_realizada'
+                ) entrevistas
+                WHERE id_vacante_ref IS NOT NULL
+                GROUP BY id_usuario, id_vacante_ref
             ) ce ON ce.id_usuario = u.id_usuario AND ce.id_vacante_ref = v.id_vacante
             WHERE p.id_vacante = ? AND v.id_reclutador = ?";
     $stmt = mysqli_prepare($con, $sql);
@@ -88,6 +254,14 @@ if ($accion === "detalles_candidatos") {
     while ($row = mysqli_fetch_assoc($res)) {
         // NUEVO: normalizar tipos para que el frontend reciba boolean/int
         // en vez de strings "0"/"1" o null crudo de MySQL.
+        $row["tiene_cv"] = candidato_pdf_disponible($row["cv_pdf"] ?? null) ? 1 : 0;
+        $row["cv_url"] = "";
+        unset($row["cv_pdf"]);
+        $row["id_usuario"] = (int)$row["id_usuario"];
+        $row["id_postulante"] = (int)$row["id_postulante"];
+        $row["esfuerzo_fisico_posible"] = (int)$row["esfuerzo_fisico_posible"];
+        $row["certificaciones"] = candidato_certificaciones($con, $row["id_postulante"]);
+        $row["discapacidades"] = candidato_discapacidades($con, $row["id_postulante"]);
         $row["entrevista_realizada"] = (bool)(int)$row["entrevista_realizada"];
         $row["puntuacion_entrevista"] = $row["puntuacion_entrevista"] !== null ? (int)$row["puntuacion_entrevista"] : null;
         $candidatos[] = $row;
@@ -109,7 +283,7 @@ if ($accion === "listar_aceptados") {
                 CONCAT(COALESCE(u.nombres, ''), ' ', COALESCE(u.apellidos, '')) AS nombre_completo,
                 u.correo,
                 COALESCE(u.telefono, 'No especificado') AS telefono,
-                COALESCE(pos.cv, '') AS cv_url,
+                pos.cv AS cv_pdf,
                 COALESCE(pos.descripcion_discapacidad, 'Sin resumen profesional registrado.') AS resumen_profesional,
                 COALESCE(pos.habilidades, 'No especificadas') AS habilidades,
                 COALESCE(pos.experiencia, 'Sin experiencia laboral registrada.') AS experiencia,
@@ -151,7 +325,8 @@ if ($accion === "listar_aceptados") {
                 "nombre_completo" => $row["nombre_completo"],
                 "correo" => $row["correo"],
                 "telefono" => $row["telefono"],
-                "cv_url" => $row["cv_url"],
+                "cv_url" => "",
+                "tiene_cv" => candidato_pdf_disponible($row["cv_pdf"] ?? null) ? 1 : 0,
                 "resumen_profesional" => $row["resumen_profesional"],
                 "habilidades" => $row["habilidades"],
                 "experiencia" => $row["experiencia"],

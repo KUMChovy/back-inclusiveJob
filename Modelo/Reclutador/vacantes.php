@@ -146,6 +146,29 @@ function vacante_pertenece_reclutador($con, $id_vacante, $id_reclutador) {
     return (bool)$row;
 }
 
+function vacante_empresa_validada($con, $id_reclutador) {
+    $u_validada = reclutador_columna_existe($con, "usuarios", "empresa_validada") ? "u.empresa_validada" : "NULL";
+    $sql = "SELECT COALESCE(e.estado_validacion, $u_validada, 0) AS empresa_validada
+            FROM reclutadores r
+            LEFT JOIN usuarios u ON u.id_usuario = r.id_usuario
+            LEFT JOIN empresas e ON e.id_empresas = r.id_empresas
+            WHERE r.id_reclutador = ?
+            LIMIT 1";
+    $stmt = mysqli_prepare($con, $sql);
+    mysqli_stmt_bind_param($stmt, 'i', $id_reclutador);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+
+    return (int)($row['empresa_validada'] ?? 0);
+}
+
+function vacante_exigir_empresa_aprobada($con, $id_reclutador) {
+    if (vacante_empresa_validada($con, $id_reclutador) !== 1) {
+        reclutador_responder(false, 'No puedes publicar vacantes hasta que tu empresa sea aprobada por el administrador.', null, 403);
+    }
+}
+
 function vacante_validar_salarios($salario_min_raw, $salario_max_raw) {
     if ($salario_min_raw === '' || $salario_max_raw === '' || $salario_min_raw === null || $salario_max_raw === null) {
         reclutador_responder(false, 'El salario debe estar entre $1,000 y $1,000,000 pesos.', null, 400);
@@ -220,6 +243,8 @@ if ($accion === "listar") {
 }
 
 if (($accion === "insertar" || $accion === "guardar") && $_SERVER["REQUEST_METHOD"] === "POST") {
+    vacante_exigir_empresa_aprobada($con, $id_reclutador);
+
     $titulo = trim($data["titulo_puesto"] ?? "");
     $descripcion = trim($data["descripcion_puesto"] ?? "");
     $requisitos = trim($data["requisitos"] ?? "");

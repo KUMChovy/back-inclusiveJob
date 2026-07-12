@@ -21,6 +21,7 @@ function perfil_reclutador_empresa_actual($con, $id_usuario) {
                 u.apellidos,
                 u.correo,
                 COALESCE(u.telefono, '') AS telefono,
+                u.foto_perfil,
                 COALESCE(e.nombre_empresas, $u_empresa, '') AS empresa,
                 COALESCE(r.puesto, $u_puesto, 'Reclutador') AS puesto,
                 COALESCE($u_sector, 'No especificado') AS sector,
@@ -77,6 +78,49 @@ function perfil_reclutador_sync_usuario_legacy($con, $id_usuario, $empresa, $pue
     mysqli_stmt_close($stmt);
 }
 
+function perfil_reclutador_input() {
+    $contentType = $_SERVER["CONTENT_TYPE"] ?? "";
+    if (stripos($contentType, "multipart/form-data") !== false) {
+        return $_POST;
+    }
+
+    return reclutador_json_body();
+}
+
+function perfil_reclutador_guardar_foto($id_usuario) {
+    if (empty($_FILES["fotoPerfil"]["name"])) {
+        return null;
+    }
+
+    $archivo = $_FILES["fotoPerfil"];
+    $extensiones = ["jpg", "jpeg", "png", "webp"];
+    $ext = strtolower(pathinfo($archivo["name"], PATHINFO_EXTENSION));
+
+    if (!in_array($ext, $extensiones, true)) {
+        reclutador_responder(false, "Formato de imagen no valido. Usa JPG, PNG o WEBP.", null, 422);
+    }
+
+    if ((int)$archivo["size"] > 5 * 1024 * 1024) {
+        reclutador_responder(false, "La imagen no debe superar 5 MB.", null, 422);
+    }
+
+    if ((int)$archivo["error"] !== UPLOAD_ERR_OK) {
+        reclutador_responder(false, "Error al subir la imagen (codigo " . $archivo["error"] . ").", null, 422);
+    }
+
+    $carpeta = __DIR__ . "/../../uploads/fotos_perfil/";
+    if (!is_dir($carpeta)) {
+        mkdir($carpeta, 0755, true);
+    }
+
+    $nombreArchivo = "perfil_" . $id_usuario . "_" . time() . "." . $ext;
+    if (!move_uploaded_file($archivo["tmp_name"], $carpeta . $nombreArchivo)) {
+        reclutador_responder(false, "No se pudo guardar la imagen de perfil.", null, 500);
+    }
+
+    return "uploads/fotos_perfil/" . $nombreArchivo;
+}
+
 if ($accion === "obtener") {
     $row = perfil_reclutador_empresa_actual($con, $id_usuario);
 
@@ -92,7 +136,7 @@ if ($accion === "obtener") {
 }
 
 if ($accion === "actualizar" && $_SERVER["REQUEST_METHOD"] === "POST") {
-    $input = reclutador_json_body();
+    $input = perfil_reclutador_input();
 
     $nombres = trim($input["nombres"] ?? "");
     $apellidos = trim($input["apellidos"] ?? "");
@@ -118,9 +162,15 @@ if ($accion === "actualizar" && $_SERVER["REQUEST_METHOD"] === "POST") {
     $validacion_actual = (int)($actual["empresa_validada"] ?? 0);
     $id_empresas = (int)($actual["id_empresas"] ?? 0);
     $nueva_validacion = ($empresa !== $empresa_actual) ? 0 : $validacion_actual;
+    $foto_perfil_ruta = perfil_reclutador_guardar_foto($id_usuario);
 
-    $stmt_user = mysqli_prepare($con, "UPDATE usuarios SET nombres = ?, apellidos = ?, telefono = ? WHERE id_usuario = ? AND id_rol = 3");
-    mysqli_stmt_bind_param($stmt_user, "sssi", $nombres, $apellidos, $telefono, $id_usuario);
+    if ($foto_perfil_ruta !== null) {
+        $stmt_user = mysqli_prepare($con, "UPDATE usuarios SET nombres = ?, apellidos = ?, telefono = ?, foto_perfil = ? WHERE id_usuario = ? AND id_rol = 3");
+        mysqli_stmt_bind_param($stmt_user, "ssssi", $nombres, $apellidos, $telefono, $foto_perfil_ruta, $id_usuario);
+    } else {
+        $stmt_user = mysqli_prepare($con, "UPDATE usuarios SET nombres = ?, apellidos = ?, telefono = ? WHERE id_usuario = ? AND id_rol = 3");
+        mysqli_stmt_bind_param($stmt_user, "sssi", $nombres, $apellidos, $telefono, $id_usuario);
+    }
     if (!mysqli_stmt_execute($stmt_user)) {
         reclutador_responder(false, "Error al actualizar los datos personales.", null, 500);
     }
@@ -155,9 +205,18 @@ if ($accion === "actualizar" && $_SERVER["REQUEST_METHOD"] === "POST") {
 
     perfil_reclutador_sync_usuario_legacy($con, $id_usuario, $empresa, $puesto, $sector, $nueva_validacion);
 
+    $_SESSION["user"]["nombre"] = trim($nombres . " " . $apellidos);
+    $_SESSION["user"]["nombres"] = $nombres;
+    $_SESSION["user"]["apellido"] = $apellidos;
+    if ($foto_perfil_ruta !== null) {
+        $_SESSION["user"]["foto_perfil"] = $foto_perfil_ruta;
+        $_SESSION["user"]["avatar"] = $foto_perfil_ruta;
+    }
+
     reclutador_responder(true, "Perfil actualizado", [
         "empresa_validada" => $nueva_validacion,
-        "cambio_empresa" => $empresa !== $empresa_actual
+        "cambio_empresa" => $empresa !== $empresa_actual,
+        "foto_perfil" => $foto_perfil_ruta
     ]);
 }
 

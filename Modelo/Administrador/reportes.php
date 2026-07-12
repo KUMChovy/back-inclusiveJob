@@ -34,12 +34,100 @@ function bind_params(mysqli_stmt $stmt, string $types, array &$params): void
 
 function get_reporte(mysqli $con, int $id): ?array
 {
-    $stmt = mysqli_prepare($con, "SELECT id_reporte, id_vacante FROM reporte_vacante WHERE id_reporte = ? LIMIT 1");
+    $stmt = mysqli_prepare($con, "
+        SELECT
+            rv.id_reporte,
+            rv.id_vacante,
+            rv.motivo,
+            rv.fecha_reporte,
+            v.titulo_puesto,
+            v.estado AS estado_vacante,
+            r.id_usuario AS id_usuario_reclutador,
+            CONCAT(COALESCE(u.nombres, ''), ' ', COALESCE(u.apellidos, '')) AS usuario_reportante,
+            u.correo AS correo_reportante
+        FROM reporte_vacante rv
+        INNER JOIN vacantes v ON rv.id_vacante = v.id_vacante
+        INNER JOIN reclutadores r ON v.id_reclutador = r.id_reclutador
+        INNER JOIN usuarios u ON rv.id_usuario = u.id_usuario
+        WHERE rv.id_reporte = ?
+        LIMIT 1
+    ");
     mysqli_stmt_bind_param($stmt, 'i', $id);
     mysqli_stmt_execute($stmt);
     $res = mysqli_stmt_get_result($stmt);
     $row = $res ? mysqli_fetch_assoc($res) : null;
     return $row ?: null;
+}
+
+function get_json_body(): array
+{
+    $raw = file_get_contents('php://input');
+    if (!$raw) return [];
+
+    $data = json_decode($raw, true);
+    return is_array($data) ? $data : [];
+}
+
+function notificar_reclutador_reporte(mysqli $con, array $reporte, string $accion, string $comentarioAdmin = ''): void
+{
+    $idUsuarioReclutador = (int)($reporte['id_usuario_reclutador'] ?? 0);
+    if ($idUsuarioReclutador <= 0) return;
+
+    $tituloVacante = $reporte['titulo_puesto'] ?? 'tu vacante';
+    $motivo = trim((string)($reporte['motivo'] ?? ''));
+    $comentarioAdmin = trim($comentarioAdmin);
+    if (strlen($comentarioAdmin) > 500) {
+        $comentarioAdmin = substr($comentarioAdmin, 0, 500);
+    }
+
+    if ($accion === 'ignorado') {
+        $texto = "✅ El reporte sobre \"{$tituloVacante}\" fue revisado por administracion y descartado. Tu vacante conserva su estado actual.";
+        $resultado = 'reporte_ignorado_admin';
+        $tipo = 'reporte_resuelto';
+    } elseif ($accion === 'vacante_eliminada') {
+        $texto = "⚠️ Administracion reviso un reporte sobre \"{$tituloVacante}\" y marco la vacante como eliminada. Revisa tus publicaciones para evitar futuras sanciones.";
+        if ($comentarioAdmin !== '') {
+            $texto .= " Motivo del administrador: {$comentarioAdmin}";
+        }
+        $resultado = 'reporte_vacante_eliminada_admin';
+        $tipo = 'reporte_reprimenda';
+    } else {
+        return;
+    }
+
+    $payload = [
+        'text' => $texto,
+        'tipo' => 'reporte_vacante',
+        'accion' => $accion,
+        'reporte' => [
+            'id_reporte' => (int)($reporte['id_reporte'] ?? 0),
+            'motivo' => $motivo,
+            'fecha_reporte' => $reporte['fecha_reporte'] ?? null,
+            'usuario_reportante' => trim((string)($reporte['usuario_reportante'] ?? '')),
+            'comentario_admin' => $comentarioAdmin,
+        ],
+        'vacante' => [
+            'id_vacante' => (int)($reporte['id_vacante'] ?? 0),
+            'titulo_puesto' => $tituloVacante,
+        ],
+    ];
+
+    $mensajeUsuario = $accion === 'ignorado'
+        ? 'Administracion descarto un reporte de vacante'
+        : 'Administracion elimino una vacante reportada';
+    $respuesta = json_encode($payload, JSON_UNESCAPED_UNICODE);
+
+    $stmt = mysqli_prepare($con, "
+        INSERT INTO chabots
+            (tipo_interaccion, mensaje_usuario, respuesta_ia, resultado, calificacion, archivo_cv, id_usuario)
+        VALUES (?, ?, ?, ?, NULL, NULL, ?)
+    ");
+
+    if (!$stmt) return;
+
+    mysqli_stmt_bind_param($stmt, 'ssssi', $tipo, $mensajeUsuario, $respuesta, $resultado, $idUsuarioReclutador);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
 }
 
 $accion = $_GET['accion'] ?? '';
@@ -148,12 +236,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'ignorar') {
     $id = (int)($_GET['id'] ?? 0);
     if (!$id) responder(false, 'ID requerido.', null, 400);
 
+    $reporte = get_reporte($con, $id);
+    if (!$reporte) responder(false, 'Reporte no encontrado.', null, 404);
+
     $stmt = mysqli_prepare($con, 'DELETE FROM reporte_vacante WHERE id_reporte = ?');
     mysqli_stmt_bind_param($stmt, 'i', $id);
     $ok = mysqli_stmt_execute($stmt);
 
     if (!$ok) responder(false, 'No se pudo ignorar el reporte.', null, 400);
     if (mysqli_stmt_affected_rows($stmt) === 0) responder(false, 'Reporte no encontrado.', null, 404);
+
+    notificar_reclutador_reporte($con, $reporte, 'ignorado');
 
     mysqli_close($con);
     responder(true, 'Reporte ignorado.');
@@ -162,6 +255,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'ignorar') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'eliminar_vacante') {
     $id = (int)($_GET['id'] ?? 0);
     if (!$id) responder(false, 'ID requerido.', null, 400);
+
+    $body = get_json_body();
+    $comentarioAdmin = trim((string)($body['explicacion'] ?? $body['comentario_admin'] ?? $body['motivo_admin'] ?? ''));
+    if ($comentarioAdmin === '') {
+        responder(false, 'La explicacion del administrador es requerida.', null, 400);
+    }
+    if (strlen($comentarioAdmin) > 500) {
+        responder(false, 'La explicacion debe tener maximo 500 caracteres.', null, 400);
+    }
 
     $reporte = get_reporte($con, $id);
     if (!$reporte) responder(false, 'Reporte no encontrado.', null, 404);
@@ -181,6 +283,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'eliminar_vacante') {
         mysqli_rollback($con);
         responder(false, 'No se pudo eliminar la vacante reportada.', null, 400);
     }
+
+    notificar_reclutador_reporte($con, $reporte, 'vacante_eliminada', $comentarioAdmin);
 
     mysqli_commit($con);
     mysqli_close($con);

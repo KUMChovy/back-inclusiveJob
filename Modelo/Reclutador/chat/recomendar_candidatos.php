@@ -337,7 +337,7 @@ $sqlCandidatos = "SELECT p.id_postulacion, p.id_vacante,
                           CONCAT(u.nombres, ' ', u.apellidos) AS nombre_completo,
                           pf.experiencia, pf.habilidades,
                           pf.descripcion_discapacidad, pf.esfuerzo_fisico_posible,
-                          pf.cv AS cv_url
+                          pf.cv AS cv_pdf
                    FROM postulaciones p
                    JOIN postulantes pf ON pf.id_postulante = p.id_postulante
                    JOIN usuarios u ON u.id_usuario = pf.id_usuario
@@ -493,7 +493,7 @@ foreach ($candidatosRaw as $c) {
         "habilidades" => mb_substr((string)$c["habilidades"], 0, 300),
         "descripcion_discapacidad" => mb_substr((string)$c["descripcion_discapacidad"], 0, 300),
         "esfuerzo_fisico_posible" => $c["esfuerzo_fisico_posible"],
-        "tiene_cv" => !empty($c["cv_url"]),
+        "tiene_cv" => isset($c["cv_pdf"]) && strncmp((string)$c["cv_pdf"], '%PDF', 4) === 0,
     ];
     $totalCandidatos++;
 }

@@ -16,6 +16,7 @@ $stmt_user = mysqli_prepare($con, "SELECT
         u.nombres,
         u.apellidos,
         u.correo,
+        u.foto_perfil,
         COALESCE(e.nombre_empresas, $u_empresa, '') AS empresa,
         COALESCE(e.estado_validacion, $u_validada, 0) AS empresa_validada
     FROM usuarios u
@@ -36,6 +37,8 @@ $user = [
     "id" => (int)$user_row["id_usuario"],
     "nombre" => trim(($user_row["nombres"] ?? "") . " " . ($user_row["apellidos"] ?? "")),
     "correo" => $user_row["correo"] ?? "",
+    "foto_perfil" => $user_row["foto_perfil"] ?? "",
+    "avatar" => $user_row["foto_perfil"] ?? "",
     "rol" => "Reclutador"
 ];
 
