@@ -9,28 +9,41 @@
 | chat_store.php).
 |
 | El reclutador, tras ver la recomendacion de "mejor candidato", puede
-| pedirle una entrevista REAL (ya NO simulada). Este endpoint NO ejecuta la
-| entrevista (eso ahora vive en Postulante/chat/entrevista_real.php, con
-| las acciones "iniciar" / "responder" / "finalizar"). Su unico trabajo es
-| dejar una "notificacion" para el postulante.
+| pedirle una entrevista REAL (proceso de seleccion, no practica). Este
+| endpoint NO ejecuta la entrevista (eso lo maneja
+| Postulante/chat/entrevista_real.php via EntrevistaRealModal). Su unico
+| trabajo es dejar una "notificacion" para el postulante.
 |
 | COMO FUNCIONA LA NOTIFICACION (sin tabla nueva):
 |   La tabla `chabots` es compartida entre Postulante y Reclutador (ver
 |   chat_store.php). Este endpoint guarda una fila usando el `id_usuario`
 |   del POSTULANTE (no del reclutador), con resultado =
-|   'entrevista_real_solicitada' y un payload JSON en `respuesta_ia`,
-|   exactamente con el mismo patron que ya usan recomendar_vacantes/
-|   analizar_cv del lado del Postulante. Cuando el postulante abra su chat,
-|   su propio historial (usePostulanteChatHistorial + mapHistoryToMessages)
-|   va a traer esa fila y renderizar la notificacion con el boton "Iniciar
-|   entrevista" que abre su EntrevistaRealModal (nuevo, propio para el
-|   flujo real, sin tocar el EntrevistaModal de la simulada).
+|   'entrevista_real_solicitada' y un payload JSON en `respuesta_ia`.
+|   Cuando el postulante abra su chat, su propio historial
+|   (usePostulanteChatHistorial + mapHistoryToMessages en ChatBubble.jsx)
+|   va a traer esa fila y renderizar la notificacion tipo
+|   "entrevista-real-solicitada", con el boton "Iniciar entrevista" que
+|   abre EntrevistaRealModal (NO el EntrevistaModal de practica).
 |
 | SEGURIDAD (misma filosofia que recomendar_candidatos.php):
 |   - Requiere sesion activa + rol de reclutador verificado en BD.
 |   - Se valida que la postulacion (id_postulacion) pertenezca a una
 |     vacante de ESTE reclutador antes de notificar a nadie. Un reclutador
 |     nunca puede solicitar una entrevista sobre una postulacion ajena.
+|
+| NUEVO (candidato que ya completo su entrevista real): antes de notificar
+| al postulante, se verifica en `chabots` si ya existe una fila con
+| resultado = 'entrevista_real_realizada' para ese usuario y esa vacante
+| (misma consulta/patron que ya usa Postulante/chat/entrevista_real.php en
+| ya_realizo_entrevista_real(), que es justo lo que bloquea con 409 que el
+| postulante la repita). Si ya existe:
+|   - NO se guarda ninguna notificacion nueva para el postulante (ya no
+|     tendria sentido, ademas entrevista_real.php lo rechazaria de todas
+|     formas con un 409 si intentara iniciarla de nuevo).
+|   - Se responde al reclutador con "ya_completada": true y la evaluacion
+|     ya guardada (puntuacion, resumen, etc.), para que el chat del
+|     reclutador pueda mostrarle un mensaje con la calificacion y, del
+|     lado del frontend, pedir automaticamente un siguiente candidato.
 |
 | FIX (500 sin JSON): con mysqli en modo de excepciones (default desde
 | PHP 8.1), un mysqli_prepare() que falla NO regresa false: lanza una
@@ -40,16 +53,19 @@
 | con el esquema real. Ahora toda la logica de BD esta envuelta en un
 | try/catch(Throwable), igual que ya hace entrevista_iniciar.php, para
 | que cualquier error real de SQL responda con JSON en vez de romper la
-| respuesta. Tambien se quito el LEFT JOIN a `empresas` que adivinaba el
-| esquema (nombre de tabla/columna no confirmado): ahora "empresa" viaja
-| vacio en el payload y el mensaje de notificacion usa el texto generico.
-| Si tu tabla de empresas existe con otro nombre, puedes agregar el JOIN
-| de vuelta una vez confirmado el esquema real (marcado abajo con AJUSTA).
+| respuesta.
 |
-| UNICO CAMBIO respecto a la version anterior: el resultado guardado en
-| `chabots` paso de 'entrevista_solicitada' a 'entrevista_real_solicitada'
-| y el texto de la notificacion ya no menciona "simulada". Toda la
-| seguridad, validaciones y logs quedan exactamente igual.
+| FIX (entrevista equivocada): antes este endpoint guardaba la fila con
+| resultado = 'entrevista_solicitada', que es el mismo valor que usa la
+| notificacion de entrevista SIMULADA (practica) del lado del postulante.
+| Como ChatBubble.jsx del postulante decide que tarjeta/modal mostrar
+| leyendo exactamente ese campo `resultado`, la notificacion caia
+| siempre en la rama de "entrevista-solicitada" (simulada) y abria
+| EntrevistaModal en vez de EntrevistaRealModal. Ahora se guarda con
+| resultado = 'entrevista_real_solicitada', que es lo que ChatBubble.jsx
+| ya esperaba para la rama "entrevista-real-solicitada". Tambien se
+| corrigio el texto de la notificacion, que decia "entrevista simulada"
+| por error.
 */
 
 session_set_cookie_params([
@@ -97,6 +113,58 @@ function registrarEvento(string $tipo, string $detalle, $idUsuario = null): void
     $linea = "[$fecha] Usuario:$usuario Tipo:$tipo Detalle:$detalle" . PHP_EOL;
 
     file_put_contents($carpeta . "/solicitar_entrevista_seguridad.log", $linea, FILE_APPEND);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| NUEVO: verifica si el candidato de esta postulacion YA completo una
+| entrevista REAL para esta vacante y, de ser asi, regresa la evaluacion
+| ya guardada.
+|--------------------------------------------------------------------------
+| Mismo patron/consulta que ya_realizo_entrevista_real() en
+| Postulante/chat/entrevista_real.php (misma tabla `chabots`, mismo
+| resultado = 'entrevista_real_realizada', mismo JSON_EXTRACT sobre
+| vacante.id_vacante). Aqui, ademas de confirmar que existe, se devuelve
+| el objeto "evaluacion" ya guardado en el payload, para no tener que
+| volver a calcularlo ni llamar a la IA de nuevo.
+*/
+function obtenerEvaluacionEntrevistaReal(mysqli $con, int $idUsuarioPostulante, int $idVacante): ?array
+{
+    $stmt = mysqli_prepare($con, "
+        SELECT respuesta_ia
+        FROM chabots
+        WHERE id_usuario = ?
+          AND resultado = 'entrevista_real_realizada'
+          AND JSON_EXTRACT(respuesta_ia, '$.vacante.id_vacante') = ?
+        LIMIT 1
+    ");
+    if ($stmt === false) {
+        throw new RuntimeException("No se pudo preparar la verificacion de entrevista previa: " . mysqli_error($con));
+    }
+    mysqli_stmt_bind_param($stmt, "ii", $idUsuarioPostulante, $idVacante);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+
+    if (!$row) {
+        return null;
+    }
+
+    $payload = json_decode((string)$row["respuesta_ia"], true);
+    $evaluacion = is_array($payload["evaluacion"] ?? null) ? $payload["evaluacion"] : null;
+
+    // Si por algun motivo el payload no traia "evaluacion" (no deberia
+    // pasar, entrevista_real.php siempre la guarda), se regresa una
+    // estructura vacia en vez de null, para que el llamador sepa que SI
+    // ya se completo la entrevista aunque no haya detalle que mostrar.
+    return $evaluacion ?? [
+        "puntuacion" => 0,
+        "resumen" => "",
+        "fortalezas" => [],
+        "areas_mejora" => [],
+        "consejo_final" => "",
+    ];
 }
 
 
@@ -208,15 +276,47 @@ try {
         responderJSON(403, ["ok" => false, "message" => "No tienes autorizacion sobre esta postulacion."]);
     }
 
-    // ── Guardar la notificacion en el chat del POSTULANTE (chabots compartida) ──
     $idUsuarioPostulante = (int)$row["id_usuario_postulante"];
     $tituloPuesto = (string)$row["titulo_puesto"];
     $modalidad = (string)$row["modalidad"];
     $idVacante = (int)$row["id_vacante"];
     $nombreCompleto = (string)$row["nombre_completo"];
 
-    // Ya NO es una entrevista simulada de practica: es la entrevista real
-    // del proceso de seleccion.
+    // ── NUEVO: si el candidato YA completo su entrevista real para esta
+    // vacante, no se le vuelve a notificar (ademas, entrevista_real.php
+    // ya bloqueria repetirla con un 409 si igual se le mandara). En vez
+    // de eso, se le informa aqui mismo al reclutador con la calificacion
+    // real, para que el chat pueda mostrarsela y pedir otro candidato.
+    $evaluacionPrevia = obtenerEvaluacionEntrevistaReal($con, $idUsuarioPostulante, $idVacante);
+    if ($evaluacionPrevia !== null) {
+        mysqli_close($con);
+        $con = null;
+
+        registrarEvento(
+            "YA_COMPLETADA",
+            "Postulacion:$id_postulacion Vacante:$idVacante Postulante(usuario):$idUsuarioPostulante",
+            $id_usuario_reclutador
+        );
+
+        responderJSON(200, [
+            "ok" => true,
+            "ya_completada" => true,
+            "mensaje" => "{$nombreCompleto} ya completo su entrevista para \"{$tituloPuesto}\" con una calificacion de {$evaluacionPrevia['puntuacion']}/10.",
+            "candidato" => [
+                "id_postulacion" => $id_postulacion,
+                "nombre_completo" => $nombreCompleto,
+            ],
+            "vacante" => [
+                "id_vacante" => $idVacante,
+                "titulo_puesto" => $tituloPuesto,
+            ],
+            "evaluacion" => $evaluacionPrevia,
+        ]);
+    }
+
+    // ── Guardar la notificacion en el chat del POSTULANTE (chabots compartida) ──
+    // FIX: el texto decia "entrevista simulada" por error. Esta
+    // notificacion es para una entrevista REAL del proceso de seleccion.
     $textoNotificacion = "📋 Un reclutador te invito a una entrevista para el puesto de \"{$tituloPuesto}\". ¿Quieres realizarla ahora?";
 
     $payload = [
@@ -229,6 +329,10 @@ try {
         ],
     ];
 
+    // FIX: tipo_interaccion Y resultado deben ser 'entrevista_real_solicitada',
+    // no 'entrevista_solicitada' (ese valor es el que usa la notificacion de
+    // entrevista SIMULADA y hace que el frontend del postulante abra el modal
+    // equivocado). Ver ChatBubble.jsx (postulante) -> mapHistoryToMessages().
     save_chat_interaction(
         $con,
         $idUsuarioPostulante,

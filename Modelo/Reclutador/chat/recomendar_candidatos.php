@@ -30,6 +30,18 @@
 |     rompia el JSON de salida y el frontend terminaba mostrando el
 |     mensaje generico "No encontré candidatos para analizar todavía."
 |     sin ninguna pista real del problema.
+|
+| NUEVO (no volver a recomendar a quien ya completo su entrevista real):
+|   - Antes de armar los datos de referencia para la IA, se consulta
+|     `chabots` (misma tabla/patron que usa
+|     Postulante/chat/entrevista_real.php) para saber que candidatos ya
+|     tienen una entrevista real completada PARA ESA VACANTE especifica.
+|     Esos candidatos se excluyen por completo: la IA nunca los ve, asi
+|     que nunca los vuelve a recomendar.
+|   - Ademas se acepta un "excluir_postulaciones" opcional en el body
+|     (arreglo de id_postulacion), para que el frontend pueda pedir "el
+|     siguiente mejor candidato" sin repetir a alguien que ya se mostro
+|     en la conversacion actual.
 */
 
 session_set_cookie_params([
@@ -208,6 +220,7 @@ if ($id_reclutador === null) {
 |--------------------------------------------------------------------------
 | 4. id_vacante opcional. Si no viene, se analizan TODAS las vacantes
 |    activas del reclutador y se busca el mejor candidato entre todas.
+|    NUEVO: excluir_postulaciones opcional, para pedir "el siguiente".
 |--------------------------------------------------------------------------
 */
 $bodyRaw = json_decode(file_get_contents("php://input"), true);
@@ -216,6 +229,16 @@ if (is_array($bodyRaw) && isset($bodyRaw["id_vacante"])) {
     $id_vacante_filtro = (int)$bodyRaw["id_vacante"];
 } elseif (isset($_POST["id_vacante"])) {
     $id_vacante_filtro = (int)$_POST["id_vacante"];
+}
+
+$excluirPostulaciones = [];
+if (is_array($bodyRaw) && isset($bodyRaw["excluir_postulaciones"]) && is_array($bodyRaw["excluir_postulaciones"])) {
+    foreach ($bodyRaw["excluir_postulaciones"] as $idExcluir) {
+        $idExcluir = (int)$idExcluir;
+        if ($idExcluir > 0) {
+            $excluirPostulaciones[] = $idExcluir;
+        }
+    }
 }
 
 /*
@@ -300,12 +323,17 @@ if (empty($vacantes)) {
 | se agrega el JOIN faltante. El archivo del CV se llama `cv`, no
 | `cv_url` (se alias-ea como cv_url para no tocar el resto del codigo
 | que ya espera esa clave).
+|
+| NUEVO: tambien se selecciona u.id_usuario (como id_usuario_candidato)
+| para poder cruzarlo contra `chabots` y saber si ese candidato ya tiene
+| una entrevista real completada.
 */
 $idsVacantes = array_keys($vacantes);
 $placeholders = implode(",", array_fill(0, count($idsVacantes), "?"));
 $tipos = str_repeat("i", count($idsVacantes));
 
 $sqlCandidatos = "SELECT p.id_postulacion, p.id_vacante,
+                          u.id_usuario AS id_usuario_candidato,
                           CONCAT(u.nombres, ' ', u.apellidos) AS nombre_completo,
                           pf.experiencia, pf.habilidades,
                           pf.descripcion_discapacidad, pf.esfuerzo_fisico_posible,
@@ -349,14 +377,117 @@ if ($resC === false) {
     responderJSON(500, ["ok" => false, "message" => "Error interno al leer candidatos."]);
 }
 
-$totalCandidatos = 0;
+// Se guardan crudos primero (sin filtrar todavia), porque para filtrar
+// por "ya completo su entrevista real" primero se necesita saber que
+// usuarios revisar (siguiente bloque).
+$candidatosRaw = [];
 while ($c = mysqli_fetch_assoc($resC)) {
+    $candidatosRaw[] = $c;
+}
+mysqli_stmt_close($stmtC);
+
+/*
+|--------------------------------------------------------------------------
+| 6.1 NUEVO: averiguar cuales de estos candidatos ya completaron una
+|     entrevista real PARA LA VACANTE especifica a la que postularon.
+|--------------------------------------------------------------------------
+| Misma tabla/patron que ya usa Postulante/chat/entrevista_real.php en
+| ya_realizo_entrevista_real(): fila en `chabots` con
+| resultado = 'entrevista_real_realizada' y el id_vacante guardado dentro
+| del JSON de respuesta_ia (vacante.id_vacante). Aqui se hace una sola
+| consulta por id_usuario (en vez de una por candidato) y el cruce con la
+| vacante se hace en PHP.
+*/
+$idsUsuariosCandidatos = [];
+foreach ($candidatosRaw as $filaCand) {
+    $idsUsuariosCandidatos[(int)$filaCand["id_usuario_candidato"]] = true;
+}
+$idsUsuariosCandidatos = array_keys($idsUsuariosCandidatos);
+
+$entrevistasCompletadas = []; // "idUsuario:idVacante" => evaluacion (o true)
+if (!empty($idsUsuariosCandidatos)) {
+    $placeholdersU = implode(",", array_fill(0, count($idsUsuariosCandidatos), "?"));
+    $tiposU = str_repeat("i", count($idsUsuariosCandidatos));
+
+    $sqlCompletadas = "SELECT id_usuario, respuesta_ia
+                        FROM chabots
+                        WHERE resultado = 'entrevista_real_realizada'
+                          AND id_usuario IN ($placeholdersU)";
+
+    $stmtE = mysqli_prepare($con, $sqlCompletadas);
+    if ($stmtE === false) {
+        mysqli_close($con);
+        registrarEvento("ERROR_SQL", "No se pudo preparar consulta de entrevistas completadas: " . mysqli_error($con), $id_usuario);
+        responderJSON(500, ["ok" => false, "message" => "Error interno al consultar entrevistas completadas."]);
+    }
+
+    $paramsRefE = [$tiposU];
+    foreach ($idsUsuariosCandidatos as $k => $v) {
+        $paramsRefE[] = &$idsUsuariosCandidatos[$k];
+    }
+    call_user_func_array([$stmtE, 'bind_param'], $paramsRefE);
+
+    if (!mysqli_stmt_execute($stmtE)) {
+        $errSql = mysqli_stmt_error($stmtE);
+        mysqli_stmt_close($stmtE);
+        mysqli_close($con);
+        registrarEvento("ERROR_SQL", "Execute entrevistas completadas fallo: " . $errSql, $id_usuario);
+        responderJSON(500, ["ok" => false, "message" => "Error interno al consultar entrevistas completadas."]);
+    }
+
+    $resE = mysqli_stmt_get_result($stmtE);
+    while ($filaCompletada = mysqli_fetch_assoc($resE)) {
+        $payloadCompletada = json_decode((string)$filaCompletada["respuesta_ia"], true);
+        $idVacPayload = isset($payloadCompletada["vacante"]["id_vacante"])
+            ? (int)$payloadCompletada["vacante"]["id_vacante"]
+            : null;
+
+        if ($idVacPayload === null) {
+            continue;
+        }
+
+        $clave = $filaCompletada["id_usuario"] . ":" . $idVacPayload;
+        if (!isset($entrevistasCompletadas[$clave])) {
+            $entrevistasCompletadas[$clave] = is_array($payloadCompletada["evaluacion"] ?? null)
+                ? $payloadCompletada["evaluacion"]
+                : true;
+        }
+    }
+    mysqli_stmt_close($stmtE);
+}
+
+mysqli_close($con);
+
+/*
+|--------------------------------------------------------------------------
+| 6.2 Filtrar candidatos: se excluyen los que el frontend pidio excluir
+|     explicitamente (excluir_postulaciones) y los que ya completaron su
+|     entrevista real para esa vacante. Estos NUNCA se envian a la IA.
+|--------------------------------------------------------------------------
+*/
+$totalCandidatos = 0;
+foreach ($candidatosRaw as $c) {
     $idVac = (int)$c["id_vacante"];
     if (!isset($vacantes[$idVac])) {
         continue;
     }
+
+    $idPostulacion = (int)$c["id_postulacion"];
+    if (in_array($idPostulacion, $excluirPostulaciones, true)) {
+        continue;
+    }
+
+    $claveCompletada = $c["id_usuario_candidato"] . ":" . $idVac;
+    if (isset($entrevistasCompletadas[$claveCompletada])) {
+        // Ya completo su entrevista real para esta vacante: no se vuelve
+        // a recomendar, para no pedirle al reclutador que le mande una
+        // solicitud de entrevista a alguien con quien ya no puede
+        // avanzar por este medio.
+        continue;
+    }
+
     $vacantes[$idVac]["candidatos"][] = [
-        "id_postulacion" => (int)$c["id_postulacion"],
+        "id_postulacion" => $idPostulacion,
         "nombre_completo" => $c["nombre_completo"],
         "experiencia" => mb_substr((string)$c["experiencia"], 0, 300),
         "habilidades" => mb_substr((string)$c["habilidades"], 0, 300),
@@ -366,14 +497,17 @@ while ($c = mysqli_fetch_assoc($resC)) {
     ];
     $totalCandidatos++;
 }
-mysqli_stmt_close($stmtC);
-mysqli_close($con);
 
 if ($totalCandidatos === 0) {
+    $huboCandidatosOriginalmente = count($candidatosRaw) > 0;
+    $mensajeVacio = $huboCandidatosOriginalmente
+        ? "No quedan mas candidatos por recomendar: ya completaron su entrevista o ya te los mostre."
+        : "Todavia no hay candidatos postulados a tus vacantes activas para analizar.";
+
     responderJSON(200, [
         "ok" => true,
         "recomendacion" => null,
-        "mensaje" => "Todavia no hay candidatos postulados a tus vacantes activas para analizar.",
+        "mensaje" => $mensajeVacio,
     ]);
 }
 

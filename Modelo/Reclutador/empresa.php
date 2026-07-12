@@ -9,6 +9,25 @@ $id_usuario = reclutador_usuario_id();
 $id_reclutador = reclutador_id_desde_usuario($con, $id_usuario);
 $accion = $_GET["accion"] ?? "";
 
+function empresa_normalizar_telefono($telefono_raw) {
+    $telefono = trim((string)$telefono_raw);
+    $digitos = preg_replace('/\D+/', '', $telefono);
+
+    if ($telefono === '') {
+        reclutador_responder(false, "El numero de telefono es obligatorio.", null, 400);
+    }
+
+    if (!preg_match('/^[0-9+\s()\-]+$/', $telefono)) {
+        reclutador_responder(false, "El numero de telefono solo puede contener numeros, espacios, guiones o parentesis.", null, 400);
+    }
+
+    if (strlen($digitos) < 10 || strlen($digitos) > 15) {
+        reclutador_responder(false, "El numero de telefono debe tener entre 10 y 15 digitos.", null, 400);
+    }
+
+    return $digitos;
+}
+
 if ($accion === "obtener") {
     $u_empresa = reclutador_columna_existe($con, "usuarios", "empresa") ? "u.empresa" : "NULL";
     $u_rfc = reclutador_columna_existe($con, "usuarios", "rfc_empresa") ? "u.rfc_empresa" : "NULL";
@@ -21,6 +40,7 @@ if ($accion === "obtener") {
                 COALESCE(e.nombre_empresas, $u_empresa, '') AS nombre_empresa,
                 COALESCE($u_rfc, '') AS rfc_empresa,
                 COALESCE(e.sitio_web, $u_sitio, '') AS sitio_web,
+                COALESCE(e.telefono_empresa, '') AS telefono_empresa,
                 COALESCE(e.descripcion, $u_descripcion, '') AS descripcion_empresa,
                 COALESCE(e.direccion, $u_direccion, '') AS direccion_empresa,
                 COALESCE(e.estado_validacion, $u_validada, 0) AS empresa_validada,
@@ -49,6 +69,7 @@ if ($accion === "actualizar" && $_SERVER["REQUEST_METHOD"] === "POST") {
     $nombre_empresa = trim($input["nombre_empresa"] ?? "");
     $rfc_empresa = trim($input["rfc_empresa"] ?? "");
     $sitio_web = trim($input["sitio_web"] ?? "");
+    $telefono_empresa = empresa_normalizar_telefono($input["telefono_empresa"] ?? "");
     $descripcion_empresa = trim($input["descripcion_empresa"] ?? "");
     $direccion_empresa = trim($input["direccion_empresa"] ?? "");
 
@@ -79,8 +100,8 @@ if ($accion === "actualizar" && $_SERVER["REQUEST_METHOD"] === "POST") {
     $id_empresas = (int)($current["id_empresas"] ?? 0);
 
     if (!$id_empresas) {
-        $stmt_empresa = mysqli_prepare($con, "INSERT INTO empresas (nombre_empresas, descripcion, direccion, telefono_empresa, correo_empresa, sitio_web, estado_validacion) VALUES (?, ?, ?, '', '', ?, ?)");
-        mysqli_stmt_bind_param($stmt_empresa, "ssssi", $nombre_empresa, $descripcion_empresa, $direccion_empresa, $sitio_web, $nueva_validacion);
+        $stmt_empresa = mysqli_prepare($con, "INSERT INTO empresas (nombre_empresas, descripcion, direccion, telefono_empresa, correo_empresa, sitio_web, estado_validacion) VALUES (?, ?, ?, ?, '', ?, ?)");
+        mysqli_stmt_bind_param($stmt_empresa, "sssssi", $nombre_empresa, $descripcion_empresa, $direccion_empresa, $telefono_empresa, $sitio_web, $nueva_validacion);
 
         if (!mysqli_stmt_execute($stmt_empresa)) {
             reclutador_responder(false, "Error al crear la empresa.", null, 500);
@@ -91,8 +112,8 @@ if ($accion === "actualizar" && $_SERVER["REQUEST_METHOD"] === "POST") {
         mysqli_stmt_bind_param($stmt_rel, "ii", $id_empresas, $id_reclutador);
         mysqli_stmt_execute($stmt_rel);
     } else {
-        $stmt_empresa = mysqli_prepare($con, "UPDATE empresas SET nombre_empresas = ?, descripcion = ?, direccion = ?, sitio_web = ?, estado_validacion = ? WHERE id_empresas = ?");
-        mysqli_stmt_bind_param($stmt_empresa, "ssssii", $nombre_empresa, $descripcion_empresa, $direccion_empresa, $sitio_web, $nueva_validacion, $id_empresas);
+        $stmt_empresa = mysqli_prepare($con, "UPDATE empresas SET nombre_empresas = ?, descripcion = ?, direccion = ?, telefono_empresa = ?, sitio_web = ?, estado_validacion = ? WHERE id_empresas = ?");
+        mysqli_stmt_bind_param($stmt_empresa, "sssssii", $nombre_empresa, $descripcion_empresa, $direccion_empresa, $telefono_empresa, $sitio_web, $nueva_validacion, $id_empresas);
 
         if (!mysqli_stmt_execute($stmt_empresa)) {
             reclutador_responder(false, "Error al guardar la empresa.", null, 500);

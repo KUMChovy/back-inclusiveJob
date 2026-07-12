@@ -34,7 +34,41 @@
 [2026-07-11 07:19:15] Usuario:28 Tipo:RECOMENDACION_OK Detalle:Vacante:15 Postulacion:6 Porcentaje:90
 [2026-07-11 07:20:49] Usuario:28 Tipo:RECOMENDACION_OK Detalle:Vacante:15 Postulacion:6 Porcentaje:90
 [2026-07-11 07:21:00] Usuario:28 Tipo:RECOMENDACION_OK Detalle:Vacante:15 Postulacion:6 Porcentaje:90
+<<<<<<< HEAD
 [2026-07-11 08:10:31] Usuario:21 Tipo:RECOMENDACION_OK Detalle:Vacante:12 Postulacion:10 Porcentaje:80
 [2026-07-11 08:10:57] Usuario:21 Tipo:RECOMENDACION_OK Detalle:Vacante:12 Postulacion:10 Porcentaje:80
 [2026-07-11 08:11:24] Usuario:21 Tipo:RECOMENDACION_OK Detalle:Vacante:10 Postulacion:8 Porcentaje:80
 [2026-07-11 09:18:57] Usuario:2 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:2 Porcentaje:60
+=======
+[2026-07-11 08:09:40] Usuario:10 Tipo:RECOMENDACION_INVALIDA Detalle:La IA devolvio ids que no coinciden con los datos reales
+[2026-07-11 09:28:30] Usuario:12 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:60
+[2026-07-11 09:35:33] Usuario:12 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:60
+[2026-07-12 03:03:48] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:50
+[2026-07-12 03:03:55] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:50
+[2026-07-12 03:04:00] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:50
+[2026-07-12 03:04:07] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:50
+[2026-07-12 03:04:15] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:50
+[2026-07-12 03:10:48] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:50
+[2026-07-12 03:11:01] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:20
+[2026-07-12 03:14:18] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:50
+[2026-07-12 03:14:24] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:50
+[2026-07-12 03:14:51] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:50
+[2026-07-12 03:14:55] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:50
+[2026-07-12 03:15:01] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:50
+[2026-07-12 03:17:36] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:1 Porcentaje:50
+[2026-07-12 04:04:27] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:2 Porcentaje:20
+[2026-07-12 04:04:35] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:2 Porcentaje:20
+[2026-07-12 04:04:40] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:2 Porcentaje:20
+[2026-07-12 04:05:03] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:2 Porcentaje:20
+[2026-07-12 04:08:47] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:2 Postulacion:3 Porcentaje:60
+[2026-07-12 04:09:04] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:4 Porcentaje:20
+[2026-07-12 04:09:17] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:2 Postulacion:3 Porcentaje:60
+[2026-07-12 04:09:24] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:2 Postulacion:3 Porcentaje:60
+[2026-07-12 04:09:30] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:2 Postulacion:3 Porcentaje:60
+[2026-07-12 04:19:08] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:3 Postulacion:6 Porcentaje:80
+[2026-07-12 04:21:34] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:3 Postulacion:6 Porcentaje:80
+[2026-07-12 04:44:31] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:2 Postulacion:3 Porcentaje:60
+[2026-07-12 04:45:28] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:1 Postulacion:4 Porcentaje:20
+[2026-07-12 04:45:38] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:2 Postulacion:3 Porcentaje:60
+[2026-07-12 04:45:48] Usuario:10 Tipo:RECOMENDACION_OK Detalle:Vacante:2 Postulacion:3 Porcentaje:60
+>>>>>>> f9114f2ff576514e38cdd920185870f226dd580d
