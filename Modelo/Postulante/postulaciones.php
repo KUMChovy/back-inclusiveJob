@@ -72,6 +72,7 @@ INNER JOIN empresas e
 ON r.id_empresas = e.id_empresas
 
 WHERE p.id_postulante = ?
+AND COALESCE(e.estado_validacion, 0) = 1
 
 ORDER BY p.fecha_postulacion DESC
 
@@ -235,6 +236,27 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         echo json_encode(["ok" => false, "msg" => "ID de vacante requerido."]);
         exit;
     }
+
+    // Solo permitir postulaciones a vacantes activas de empresas aprobadas
+    $stmtVac = $con->prepare("
+        SELECT v.id_vacante
+        FROM vacantes v
+        INNER JOIN reclutadores r ON r.id_reclutador = v.id_reclutador
+        INNER JOIN empresas e ON e.id_empresas = r.id_empresas
+        WHERE v.id_vacante = ?
+          AND v.estado = 'activa'
+          AND COALESCE(e.estado_validacion, 0) = 1
+        LIMIT 1
+    ");
+    $stmtVac->bind_param("i", $id_vacante);
+    $stmtVac->execute();
+    $stmtVac->store_result();
+    if ($stmtVac->num_rows === 0) {
+        echo json_encode(["ok" => false, "msg" => "La vacante no esta disponible para postulaciones."]);
+        $stmtVac->close();
+        exit;
+    }
+    $stmtVac->close();
 
     // Verificar que no esté ya postulado
     $stmtDup = $con->prepare("SELECT id_postulacion FROM postulaciones WHERE id_postulante = ? AND id_vacante = ? LIMIT 1");

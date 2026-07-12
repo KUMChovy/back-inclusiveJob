@@ -146,9 +146,10 @@ try {
                 COALESCE(e.nombre_empresas, 'Empresa') AS empresa
              FROM vacantes v
              INNER JOIN vacante_discapacidad vd ON vd.id_vacante = v.id_vacante
-             LEFT JOIN reclutadores r ON r.id_reclutador = v.id_reclutador
-             LEFT JOIN empresas e ON e.id_empresas = r.id_empresas
+             INNER JOIN reclutadores r ON r.id_reclutador = v.id_reclutador
+             INNER JOIN empresas e ON e.id_empresas = r.id_empresas
              WHERE v.estado = 'activa'
+               AND COALESCE(e.estado_validacion, 0) = 1
                AND vd.id_tipo_discapacidad IN ($placeholders)
                AND NOT EXISTS (
                     SELECT 1 FROM postulaciones p
@@ -169,7 +170,10 @@ try {
             "SELECT COUNT(DISTINCT v.id_vacante)
              FROM vacantes v
              INNER JOIN vacante_discapacidad vd ON vd.id_vacante = v.id_vacante
+             INNER JOIN reclutadores r ON r.id_reclutador = v.id_reclutador
+             INNER JOIN empresas e ON e.id_empresas = r.id_empresas
              WHERE v.estado = 'activa'
+               AND COALESCE(e.estado_validacion, 0) = 1
                AND vd.id_tipo_discapacidad IN ($placeholders)
                AND v.fecha_publicacion >= DATE_SUB(NOW(), INTERVAL 30 DAY)",
             $types,
@@ -190,9 +194,10 @@ try {
                 COALESCE(e.nombre_empresas, 'Empresa') AS empresa
              FROM postulaciones p
              INNER JOIN vacantes v ON v.id_vacante = p.id_vacante
-             LEFT JOIN reclutadores r ON r.id_reclutador = v.id_reclutador
-             LEFT JOIN empresas e ON e.id_empresas = r.id_empresas
+             INNER JOIN reclutadores r ON r.id_reclutador = v.id_reclutador
+             INNER JOIN empresas e ON e.id_empresas = r.id_empresas
              WHERE p.id_postulante = ?
+               AND COALESCE(e.estado_validacion, 0) = 1
              ORDER BY p.fecha_postulacion DESC
              LIMIT 3",
             "i",
@@ -211,12 +216,14 @@ try {
         $postulante["esfuerzo_fisico_posible"] !== null;
 
     $checklist = [
-        ["id" => 1, "label" => "Datos de cuenta", "done" => trim((string)$usuario["nombres"]) !== '' && trim((string)$usuario["correo"]) !== '', "path" => "/formulario", "peso" => 20],
-        ["id" => 2, "label" => "Evaluacion inicial", "done" => (bool)$hasInicial, "path" => "/formulario", "peso" => 25],
+        ["id" => 1, "label" => "Datos de cuenta", "done" => trim((string)$usuario["nombres"]) !== '' && trim((string)$usuario["correo"]) !== '', "path" => "/formulario", "peso" => 15],
+        ["id" => 2, "label" => "Evaluacion inicial", "done" => (bool)$hasInicial, "path" => "/formulario", "peso" => 15],
         ["id" => 3, "label" => "Foto de perfil", "done" => !empty($usuario["foto_perfil"]), "path" => "/formulario", "peso" => 10],
         ["id" => 4, "label" => "Discapacidad registrada", "done" => count($discapacidades) > 0, "path" => "/formulario", "peso" => 15],
-        ["id" => 5, "label" => "Al menos 1 certificacion", "done" => $certificaciones > 0, "path" => "/postulante/certificaciones", "peso" => 20],
-        ["id" => 6, "label" => "CV o portafolio", "done" => $postulante && (!empty($postulante["tiene_cv"]) || !empty($postulante["portafolio_url"])), "path" => "/formulario", "peso" => 10],
+        ["id" => 5, "label" => "Registro de habilidades", "done" => $postulante && trim((string)($postulante["habilidades"] ?? '')) !== '', "path" => "/postulante/perfil", "peso" => 10],
+        ["id" => 6, "label" => "Portafolio electronico", "done" => $postulante && !empty($postulante["portafolio_url"]), "path" => "/postulante/perfil", "peso" => 10],
+        ["id" => 7, "label" => "Al menos 1 certificacion", "done" => $certificaciones > 0, "path" => "/postulante/certificaciones", "peso" => 20],
+        ["id" => 8, "label" => "CV registrado", "done" => $postulante && !empty($postulante["tiene_cv"]), "path" => "/postulante/certificaciones", "peso" => 5],
     ];
 
     $completado = 0;

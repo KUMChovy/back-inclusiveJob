@@ -73,6 +73,7 @@ if ($method === 'GET') {
     ON rec.id_empresas = e.id_empresas
 
   WHERE r.id_usuario = ?
+    AND COALESCE(e.estado_validacion, 0) = 1
 
   ORDER BY r.fecha_reporte DESC
   ";
@@ -190,6 +191,27 @@ if ($method === 'POST') {
         echo json_encode(["ok" => false, "msg" => "Faltan datos requeridos."]);
         exit;
     }
+
+    // Solo permitir reportes sobre vacantes visibles para postulantes
+    $stmtVac = $con->prepare("
+        SELECT v.id_vacante
+        FROM vacantes v
+        INNER JOIN reclutadores rec ON rec.id_reclutador = v.id_reclutador
+        INNER JOIN empresas e ON e.id_empresas = rec.id_empresas
+        WHERE v.id_vacante = ?
+          AND v.estado = 'activa'
+          AND COALESCE(e.estado_validacion, 0) = 1
+        LIMIT 1
+    ");
+    $stmtVac->bind_param("i", $id_vacante);
+    $stmtVac->execute();
+    $stmtVac->store_result();
+    if ($stmtVac->num_rows === 0) {
+        echo json_encode(["ok" => false, "msg" => "La vacante no esta disponible para reportarse."]);
+        $stmtVac->close();
+        exit;
+    }
+    $stmtVac->close();
 
     // Evitar reporte duplicado
     $stmtDup = $con->prepare("SELECT id_reporte FROM reporte_vacante WHERE id_vacante = ? AND id_usuario = ? LIMIT 1");

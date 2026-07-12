@@ -65,13 +65,31 @@ if (!$fila) {
 }
 
 // ── Tipo de discapacidad del postulante ──────────────────────
+$catalogoDiscapacidades = [];
+$resCatalogo = mysqli_query($con,
+    "SELECT id_tipo_discapacidad, nombre_discapacidad, descripcion
+     FROM tipo_discapacidad
+     ORDER BY nombre_discapacidad ASC"
+);
+if ($resCatalogo) {
+    while ($row = mysqli_fetch_assoc($resCatalogo)) {
+        $catalogoDiscapacidades[] = [
+            "id_tipo_discapacidad" => (int)$row["id_tipo_discapacidad"],
+            "nombre_discapacidad" => $row["nombre_discapacidad"],
+            "descripcion" => $row["descripcion"] ?? "",
+        ];
+    }
+    mysqli_free_result($resCatalogo);
+}
+
 $discapacidades = [];
+$discapacidadIds = [];
 
 if ($fila["id_postulante"]) {
     $id_postulante = (int)$fila["id_postulante"];
 
     $stmtDisc = mysqli_prepare($con,
-        "SELECT td.nombre_discapacidad
+        "SELECT td.id_tipo_discapacidad, td.nombre_discapacidad
          FROM postulante_discapacidad pd
          INNER JOIN tipo_discapacidad td ON td.id_tipo_discapacidad = pd.id_tipo_discapacidad
          WHERE pd.id_postulante = ?"
@@ -80,6 +98,7 @@ if ($fila["id_postulante"]) {
     mysqli_stmt_execute($stmtDisc);
     $resDisc = mysqli_stmt_get_result($stmtDisc);
     while ($row = mysqli_fetch_assoc($resDisc)) {
+        $discapacidadIds[] = (int)$row["id_tipo_discapacidad"];
         $discapacidades[] = $row["nombre_discapacidad"];
     }
     mysqli_stmt_close($stmtDisc);
@@ -102,4 +121,6 @@ echo json_encode([
     "habilidades"             => $fila["habilidades"]             ?? "",
     "portafolio_url"          => $fila["portafolio_url"]          ?? "",
     "discapacidad"            => $discapacidades,
+    "discapacidad_ids"        => $discapacidadIds,
+    "catalogo_discapacidades" => $catalogoDiscapacidades,
 ]);

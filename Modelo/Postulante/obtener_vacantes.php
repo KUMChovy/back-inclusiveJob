@@ -145,10 +145,28 @@ $sqlVacantes = "
         v.salario_max,
         v.estado,
         v.fecha_publicacion,
-        v.fecha_cierre
+        v.fecha_cierre,
+        v.id_reclutador,
+        CONCAT(COALESCE(u.nombres, ''), ' ', COALESCE(u.apellidos, '')) AS reclutador_nombre,
+        u.correo AS reclutador_correo,
+        u.telefono AS reclutador_telefono,
+        u.foto_perfil AS reclutador_foto,
+        COALESCE(r.puesto, 'Reclutador') AS reclutador_puesto,
+        e.id_empresas,
+        e.nombre_empresas AS empresa,
+        e.descripcion AS empresa_descripcion,
+        e.direccion AS empresa_direccion,
+        e.telefono_empresa,
+        e.correo_empresa,
+        e.sitio_web AS empresa_sitio_web,
+        e.estado_validacion AS empresa_estado_validacion
     FROM vacantes v
     INNER JOIN vacante_discapacidad vd ON v.id_vacante = vd.id_vacante
+    INNER JOIN reclutadores r ON r.id_reclutador = v.id_reclutador
+    INNER JOIN empresas e ON e.id_empresas = r.id_empresas
+    INNER JOIN usuarios u ON u.id_usuario = r.id_usuario
     WHERE v.estado = 'activa'
+      AND COALESCE(e.estado_validacion, 0) = 1
       AND vd.id_tipo_discapacidad IN ($placeholders)
     ORDER BY v.fecha_publicacion DESC
 ";
@@ -217,6 +235,27 @@ foreach ($vacantes as &$v) {
     $v["salario_max"] = (float)$v["salario_max"];
     $v["postulada"] = isset($postuladas[$id]);
     $v["reportada"] = isset($reportadas[$id]);
+    $v["id_reclutador"] = (int)$v["id_reclutador"];
+    $v["id_empresas"] = (int)$v["id_empresas"];
+    $v["empresa_estado_validacion"] = (int)$v["empresa_estado_validacion"];
+    $v["reclutador"] = [
+        "id_reclutador" => $v["id_reclutador"],
+        "nombre" => trim($v["reclutador_nombre"] ?? "") ?: "Reclutador",
+        "correo" => $v["reclutador_correo"] ?? "",
+        "telefono" => $v["reclutador_telefono"] ?? "",
+        "foto_perfil" => $v["reclutador_foto"] ?? null,
+        "puesto" => $v["reclutador_puesto"] ?? "Reclutador",
+    ];
+    $v["empresa_info"] = [
+        "id_empresas" => $v["id_empresas"],
+        "nombre" => $v["empresa"] ?? "Empresa",
+        "descripcion" => $v["empresa_descripcion"] ?? "",
+        "direccion" => $v["empresa_direccion"] ?? "",
+        "telefono" => $v["telefono_empresa"] ?? "",
+        "correo" => $v["correo_empresa"] ?? "",
+        "sitio_web" => $v["empresa_sitio_web"] ?? "",
+        "estado_validacion" => $v["empresa_estado_validacion"],
+    ];
 }
 unset($v);
 

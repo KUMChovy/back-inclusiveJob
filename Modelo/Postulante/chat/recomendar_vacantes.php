@@ -493,9 +493,10 @@ try {
             COALESCE(e.nombre_empresas, 'Empresa') AS empresa
          FROM vacantes v
          INNER JOIN vacante_discapacidad vd ON vd.id_vacante = v.id_vacante
-         LEFT JOIN reclutadores r ON r.id_reclutador = v.id_reclutador
-         LEFT JOIN empresas e ON e.id_empresas = r.id_empresas
+         INNER JOIN reclutadores r ON r.id_reclutador = v.id_reclutador
+         INNER JOIN empresas e ON e.id_empresas = r.id_empresas
          WHERE v.estado = 'activa'
+           AND COALESCE(e.estado_validacion, 0) = 1
            AND vd.id_tipo_discapacidad IN ($placeholders)
            AND NOT EXISTS (
                 SELECT 1 FROM postulaciones p

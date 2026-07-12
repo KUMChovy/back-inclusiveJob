@@ -73,10 +73,11 @@ function obtener_vacante_para_entrevista(mysqli $con, int $idUsuario, int $idVac
         FROM postulaciones po
         INNER JOIN postulantes p ON p.id_postulante = po.id_postulante
         INNER JOIN vacantes v ON v.id_vacante = po.id_vacante
-        LEFT JOIN reclutadores r ON r.id_reclutador = v.id_reclutador
-        LEFT JOIN empresas e ON e.id_empresas = r.id_empresas
+        INNER JOIN reclutadores r ON r.id_reclutador = v.id_reclutador
+        INNER JOIN empresas e ON e.id_empresas = r.id_empresas
         WHERE p.id_usuario = ?
           AND v.id_vacante = ?
+          AND COALESCE(e.estado_validacion, 0) = 1
         ORDER BY po.fecha_postulacion DESC
         LIMIT 1
     ";

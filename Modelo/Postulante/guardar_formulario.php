@@ -67,6 +67,22 @@ if (!$usuarioDb || (int)$usuarioDb["id_rol"] !== 2) {
 //  GET — verificar si el formulario ya fue completado
 // ════════════════════════════════════════════════════════════
 if ($_SERVER["REQUEST_METHOD"] === "GET") {
+    $catalogoDiscapacidades = [];
+    $resCatalogo = mysqli_query($con,
+        "SELECT id_tipo_discapacidad, nombre_discapacidad, descripcion
+         FROM tipo_discapacidad
+         ORDER BY nombre_discapacidad ASC"
+    );
+    if ($resCatalogo) {
+        while ($row = mysqli_fetch_assoc($resCatalogo)) {
+            $catalogoDiscapacidades[] = [
+                "id_tipo_discapacidad" => (int)$row["id_tipo_discapacidad"],
+                "nombre_discapacidad" => $row["nombre_discapacidad"],
+                "descripcion" => $row["descripcion"] ?? "",
+            ];
+        }
+    }
+
     $stmtCheck = mysqli_prepare($con,
         "SELECT
             p.id_postulante,
@@ -116,6 +132,7 @@ if ($_SERVER["REQUEST_METHOD"] === "GET") {
         "completado"          => $completado,
         "requiere_formulario" => !$completado,
         "id_postulante"       => $postulante ? (int)$postulante["id_postulante"] : null,
+        "discapacidades"      => $catalogoDiscapacidades,
         "tipos_discapacidad"  => $tiposIds, // ← ids ya seleccionados
     ]);
     exit;
@@ -132,6 +149,28 @@ if (!is_array($tiposDiscapacidad)) {
 }
 $tiposDiscapacidad = array_values(array_unique(array_filter(array_map('trim', $tiposDiscapacidad))));
 
+$tiposDiscapacidadIds = [];
+foreach ($tiposDiscapacidad as $tipoRaw) {
+    if (is_numeric($tipoRaw)) {
+        $tiposDiscapacidadIds[] = (int)$tipoRaw;
+        continue;
+    }
+
+    $stmtTipoNombre = mysqli_prepare($con,
+        "SELECT id_tipo_discapacidad FROM tipo_discapacidad WHERE nombre_discapacidad = ? LIMIT 1"
+    );
+    mysqli_stmt_bind_param($stmtTipoNombre, "s", $tipoRaw);
+    mysqli_stmt_execute($stmtTipoNombre);
+    $resTipoNombre = mysqli_stmt_get_result($stmtTipoNombre);
+    $tipoNombre = mysqli_fetch_assoc($resTipoNombre);
+    mysqli_stmt_close($stmtTipoNombre);
+
+    if ($tipoNombre) {
+        $tiposDiscapacidadIds[] = (int)$tipoNombre["id_tipo_discapacidad"];
+    }
+}
+$tiposDiscapacidadIds = array_values(array_unique(array_filter($tiposDiscapacidadIds, fn($id) => $id > 0)));
+
 $descripcionDiscapacidad = trim($_POST["descripcionDiscapacidad"] ?? "");
 $esfuerzoFisicoRaw       = trim($_POST["esfuerzoFisico"]          ?? "");
 $experiencia             = trim($_POST["experiencia"]             ?? "");
@@ -139,10 +178,29 @@ $habilidades             = trim($_POST["habilidades"]             ?? "");
 $esfuerzo_fisico         = ($esfuerzoFisicoRaw === "No") ? 0 : 1;
 
 // ── Validaciones de texto ─────────────────────────────────
-if (empty($tiposDiscapacidad)) {
+if (empty($tiposDiscapacidadIds)) {
     echo json_encode(["success" => false, "mensaje" => "Debes seleccionar al menos un tipo de discapacidad."]);
     exit;
 }
+
+$placeholdersTipos = implode(',', array_fill(0, count($tiposDiscapacidadIds), '?'));
+$tiposBind = str_repeat('i', count($tiposDiscapacidadIds));
+$stmtValidarTipos = mysqli_prepare($con, "SELECT id_tipo_discapacidad FROM tipo_discapacidad WHERE id_tipo_discapacidad IN ($placeholdersTipos)");
+mysqli_stmt_bind_param($stmtValidarTipos, $tiposBind, ...$tiposDiscapacidadIds);
+mysqli_stmt_execute($stmtValidarTipos);
+$resValidarTipos = mysqli_stmt_get_result($stmtValidarTipos);
+$tiposValidos = [];
+while ($rowTipo = mysqli_fetch_assoc($resValidarTipos)) {
+    $tiposValidos[] = (int)$rowTipo["id_tipo_discapacidad"];
+}
+mysqli_stmt_close($stmtValidarTipos);
+sort($tiposDiscapacidadIds);
+sort($tiposValidos);
+if ($tiposDiscapacidadIds !== $tiposValidos) {
+    echo json_encode(["success" => false, "mensaje" => "Uno o mas tipos de discapacidad no son validos."]);
+    exit;
+}
+
 if ($descripcionDiscapacidad === "") {
     echo json_encode(["success" => false, "mensaje" => "La descripcion de la discapacidad es requerida."]);
     exit;
@@ -261,25 +319,13 @@ mysqli_stmt_bind_param($stmtDel, "i", $id_postulante);
 mysqli_stmt_execute($stmtDel);
 mysqli_stmt_close($stmtDel);
 
-foreach ($tiposDiscapacidad as $tipoNombre) {
-    $stmtTipo = mysqli_prepare($con,
-        "SELECT id_tipo_discapacidad FROM tipo_discapacidad WHERE nombre_discapacidad = ? LIMIT 1"
+foreach ($tiposDiscapacidadIds as $id_tipo) {
+    $stmtIns = mysqli_prepare($con,
+        "INSERT INTO postulante_discapacidad (id_postulante, id_tipo_discapacidad) VALUES (?, ?)"
     );
-    mysqli_stmt_bind_param($stmtTipo, "s", $tipoNombre);
-    mysqli_stmt_execute($stmtTipo);
-    $resTipo = mysqli_stmt_get_result($stmtTipo);
-    $tipo    = mysqli_fetch_assoc($resTipo);
-    mysqli_stmt_close($stmtTipo);
-
-    if ($tipo) {
-        $id_tipo = (int)$tipo["id_tipo_discapacidad"];
-        $stmtIns = mysqli_prepare($con,
-            "INSERT INTO postulante_discapacidad (id_postulante, id_tipo_discapacidad) VALUES (?, ?)"
-        );
-        mysqli_stmt_bind_param($stmtIns, "ii", $id_postulante, $id_tipo);
-        mysqli_stmt_execute($stmtIns);
-        mysqli_stmt_close($stmtIns);
-    }
+    mysqli_stmt_bind_param($stmtIns, "ii", $id_postulante, $id_tipo);
+    mysqli_stmt_execute($stmtIns);
+    mysqli_stmt_close($stmtIns);
 }
 
 mysqli_close($con);

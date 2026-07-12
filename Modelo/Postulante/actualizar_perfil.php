@@ -87,6 +87,48 @@ if ($discRaw !== "") {
     if (is_array($discArr)) $discapacidades = $discArr;
 }
 
+// Acepta discapacidades por ID (nuevo flujo dinamico) y por nombre
+// (compatibilidad con versiones anteriores del frontend).
+$discapacidadIds = [];
+if (!empty($discapacidades)) {
+    $stmtTipoPorId = mysqli_prepare($con,
+        "SELECT id_tipo_discapacidad FROM tipo_discapacidad WHERE id_tipo_discapacidad = ? LIMIT 1"
+    );
+    $stmtTipoPorNombre = mysqli_prepare($con,
+        "SELECT id_tipo_discapacidad FROM tipo_discapacidad WHERE nombre_discapacidad = ? LIMIT 1"
+    );
+
+    foreach ($discapacidades as $discValor) {
+        $discValor = limpiar($discValor);
+        if ($discValor === "") {
+            continue;
+        }
+
+        $tipo = null;
+        if (ctype_digit($discValor)) {
+            $id_tipo_tmp = (int)$discValor;
+            mysqli_stmt_bind_param($stmtTipoPorId, "i", $id_tipo_tmp);
+            mysqli_stmt_execute($stmtTipoPorId);
+            $resTipo = mysqli_stmt_get_result($stmtTipoPorId);
+            $tipo = mysqli_fetch_assoc($resTipo);
+            mysqli_free_result($resTipo);
+        } else {
+            mysqli_stmt_bind_param($stmtTipoPorNombre, "s", $discValor);
+            mysqli_stmt_execute($stmtTipoPorNombre);
+            $resTipo = mysqli_stmt_get_result($stmtTipoPorNombre);
+            $tipo = mysqli_fetch_assoc($resTipo);
+            mysqli_free_result($resTipo);
+        }
+
+        if ($tipo) {
+            $discapacidadIds[(int)$tipo["id_tipo_discapacidad"]] = true;
+        }
+    }
+
+    mysqli_stmt_close($stmtTipoPorId);
+    mysqli_stmt_close($stmtTipoPorNombre);
+}
+
 // descripcion_discapacidad = nota + porcentaje
 $nota       = limpiar($_POST["nota"]       ?? "");
 $porcentaje = trim((string)($_POST["porcentaje"] ?? ""));
@@ -281,26 +323,15 @@ mysqli_stmt_bind_param($stmtDel, "i", $id_postulante);
 mysqli_stmt_execute($stmtDel);
 mysqli_stmt_close($stmtDel);
 
-if (!empty($discapacidades)) {
-    $stmtTipo = mysqli_prepare($con,
-        "SELECT id_tipo_discapacidad FROM tipo_discapacidad WHERE nombre_discapacidad = ? LIMIT 1"
-    );
+if (!empty($discapacidadIds)) {
     $stmtIns = mysqli_prepare($con,
         "INSERT IGNORE INTO postulante_discapacidad (id_postulante, id_tipo_discapacidad) VALUES (?, ?)"
     );
-    foreach ($discapacidades as $nombreDisc) {
-        $nombreDisc = limpiar($nombreDisc);
-        mysqli_stmt_bind_param($stmtTipo, "s", $nombreDisc);
-        mysqli_stmt_execute($stmtTipo);
-        $tipo = mysqli_fetch_assoc(mysqli_stmt_get_result($stmtTipo));
-        mysqli_stmt_free_result($stmtTipo);
-        if ($tipo) {
-            $id_tipo = (int)$tipo["id_tipo_discapacidad"];
-            mysqli_stmt_bind_param($stmtIns, "ii", $id_postulante, $id_tipo);
-            mysqli_stmt_execute($stmtIns);
-        }
+    foreach (array_keys($discapacidadIds) as $id_tipo) {
+        $id_tipo = (int)$id_tipo;
+        mysqli_stmt_bind_param($stmtIns, "ii", $id_postulante, $id_tipo);
+        mysqli_stmt_execute($stmtIns);
     }
-    mysqli_stmt_close($stmtTipo);
     mysqli_stmt_close($stmtIns);
 }
 
