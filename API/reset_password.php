@@ -1,5 +1,7 @@
 <?php
 
+
+require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../Conexion.php';
 
 $conn = conectarbd();
@@ -144,7 +146,7 @@ $exito = true;
         </p>
 
         <a
-            href="http://localhost:5173/login"
+            href="<?php echo htmlspecialchars(inclusijob_frontend_url('login'), ENT_QUOTES, 'UTF-8'); ?>"
             class="mt-6 inline-block bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700 transition"
         >
             Ir al login

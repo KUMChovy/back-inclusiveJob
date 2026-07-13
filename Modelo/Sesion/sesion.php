@@ -1,5 +1,7 @@
 <?php
 
+
+require_once __DIR__ . '/../../config/cors.php';
 /*
 |--------------------------------------------------------------------------
 | API DE SESION - sesion.php
@@ -24,16 +26,12 @@
 | 4. Devuelve success=true para que el front redirija al login.
 */
 
-session_set_cookie_params([
-    "httponly" => true,
-    "secure" => false,
-    "samesite" => "Strict"
-]);
+inclusijob_session_cookie_params();
 
 session_start();
 
 header("Content-Type: application/json");
-header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Origin: " . INCLUSIJOB_FRONTEND_ORIGIN);
 header("Access-Control-Allow-Credentials: true");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
@@ -50,13 +48,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && $accion === "logout") {
 
     if (ini_get("session.use_cookies")) {
         $params = session_get_cookie_params();
-        setcookie(session_name(), '', time() - 42000,
-            $params["path"],
-            $params["domain"],
-            $params["secure"],
-            $params["httponly"]
-            
-        );
+        setcookie(session_name(), '', [
+            "expires" => time() - 42000,
+            "path" => $params["path"],
+            "domain" => $params["domain"],
+            "secure" => $params["secure"],
+            "httponly" => $params["httponly"],
+            "samesite" => $params["samesite"] ?? INCLUSIJOB_SESSION_SAMESITE,
+        ]);
     }
 
     ini_set('display_errors', 0);
@@ -112,12 +111,14 @@ if ($inactiveTime > $_SESSION["session_timeout"]) {
 
     if (ini_get("session.use_cookies")) {
         $params = session_get_cookie_params();
-        setcookie(session_name(), '', time() - 42000,
-            $params["path"],
-            $params["domain"],
-            $params["secure"],
-            $params["httponly"]
-        );
+        setcookie(session_name(), '', [
+            "expires" => time() - 42000,
+            "path" => $params["path"],
+            "domain" => $params["domain"],
+            "secure" => $params["secure"],
+            "httponly" => $params["httponly"],
+            "samesite" => $params["samesite"] ?? INCLUSIJOB_SESSION_SAMESITE,
+        ]);
     }
 
     session_destroy();

@@ -1,5 +1,7 @@
 <?php
 
+
+require_once __DIR__ . '/../config/cors.php';
 // =========================
 // CORS
 // =========================
@@ -8,7 +10,7 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
 require_once __DIR__ . '/../vendor/autoload.php';
-header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Origin: " . INCLUSIJOB_FRONTEND_ORIGIN);
 header("Access-Control-Allow-Credentials: true");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
@@ -179,9 +181,9 @@ try {
         // =========================
         // Enlace de recuperación
         // =========================
-        $resetLink =
-            "http://localhost/back-inclusiveJob/API/reset_password.php?token="
-            . $token;
+        $resetLink = inclusijob_backend_url(
+            'API/reset_password.php?token=' . urlencode($token)
+        );
 
         $asunto = "Restablecer contraseña";
 

@@ -1,6 +1,8 @@
 <?php
+
+require_once __DIR__ . '/../../config/cors.php';
 header("Content-Type: application/json; charset=utf-8");
-header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Origin: " . INCLUSIJOB_FRONTEND_ORIGIN);
 header("Access-Control-Allow-Credentials: true");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
@@ -10,7 +12,7 @@ if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
     exit;
 }
 
-session_set_cookie_params(["httponly" => true, "secure" => false, "samesite" => "Strict"]);
+inclusijob_session_cookie_params();
 session_start();
 
 if (!isset($_SESSION["user"]["id"])) {
@@ -341,6 +343,6 @@ echo json_encode([
     "ok"          => true,
     "msg"         => "Perfil actualizado correctamente.",
     "foto_perfil" => $foto_perfil_ruta
-        ? "http://localhost/inclusijob_back/back-inclusiveJob/" . $foto_perfil_ruta
+        ? inclusijob_backend_url($foto_perfil_ruta)
         : null
 ]);

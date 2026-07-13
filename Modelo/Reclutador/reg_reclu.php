@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+
+require_once __DIR__ . '/../../config/cors.php';
 /*
 |--------------------------------------------------------------------------
 | Headers de seguridad
@@ -17,10 +19,7 @@ header("Referrer-Policy: no-referrer");
 | CORS
 |--------------------------------------------------------------------------
 */
-$allowedOrigins = [
-    "http://localhost:5173",
-    "http://localhost:3000"
-];
+$allowedOrigins = [INCLUSIJOB_FRONTEND_ORIGIN];
 
 if (
     isset($_SERVER['HTTP_ORIGIN']) &&

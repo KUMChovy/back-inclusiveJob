@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../../../config/cors.php';
+
 /*
 |--------------------------------------------------------------------------
 | Endpoint: Chatbot con IA para postulantes (InclusiveJob)
@@ -13,15 +15,11 @@
 | 6. Guardado de historial
 */
 
-session_set_cookie_params([
-    "httponly" => true,
-    "secure" => false,
-    "samesite" => "Strict",
-]);
+inclusijob_session_cookie_params();
 session_start();
 
 header("Content-Type: text/plain; charset=utf-8");
-header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Origin: " . INCLUSIJOB_FRONTEND_ORIGIN);
 header("Access-Control-Allow-Credentials: true");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");

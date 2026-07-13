@@ -1,4 +1,6 @@
 <?php
+
+require_once __DIR__ . '/../../config/cors.php';
 // ============================================================
 //  reenviar_codigo.php
 //  Genera un NUEVO código para un registro que aún está pendiente
@@ -10,7 +12,7 @@
 //  Respuesta JSON: { "success": true|false, "codigo": "...", "mensaje": "..." }
 // ============================================================
 
-header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Origin: " . INCLUSIJOB_FRONTEND_ORIGIN);
 header("Access-Control-Allow-Credentials: true");
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');

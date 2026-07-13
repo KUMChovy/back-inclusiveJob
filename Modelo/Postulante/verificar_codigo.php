@@ -1,4 +1,6 @@
-﻿<?php
+<?php
+
+require_once __DIR__ . '/../../config/cors.php';
 // ============================================================
 //  verificar_codigo.php
 //  Verifica el codigo de un registro pendiente y, si es correcto,
@@ -9,7 +11,7 @@
 //  Respuesta JSON: { "success": true|false, "mensaje": "..." }
 // ============================================================
 
-header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Origin: " . INCLUSIJOB_FRONTEND_ORIGIN);
 header("Access-Control-Allow-Credentials: true");
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
@@ -126,7 +128,7 @@ mysqli_begin_transaction($con);
 
 try {
     $stmtIns = mysqli_prepare($con,
-        "INSERT INTO usuarios (nombres, apellidos, correo, contraseña, telefono, correo_validado, id_rol)
+        "INSERT INTO usuarios (nombres, apellidos, correo, contrase�a, telefono, correo_validado, id_rol)
          VALUES (?, ?, ?, ?, ?, 1, ?)"
     );
 

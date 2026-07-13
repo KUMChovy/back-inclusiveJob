@@ -1,5 +1,7 @@
 <?php
 
+
+require_once __DIR__ . '/../../config/cors.php';
 /*
 |--------------------------------------------------------------------------
 | API DE SESION - login.php
@@ -26,11 +28,7 @@
 /* =========================
    SESIÓN SEGURA
 ========================= */
-session_set_cookie_params([
-    "httponly" => true,
-    "secure" => false, // true en HTTPS (producción)
-    "samesite" => "Strict"
-]);
+inclusijob_session_cookie_params();
 
 session_start();
 
@@ -38,7 +36,7 @@ session_start();
    HEADERS SEGURIDAD
 ========================= */
 header("Content-Type: application/json");
-header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Origin: " . INCLUSIJOB_FRONTEND_ORIGIN);
 header("Access-Control-Allow-Credentials: true");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");

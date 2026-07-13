@@ -1,8 +1,10 @@
 <?php
 
+
+require_once __DIR__ . '/../../config/cors.php';
 function reclutador_headers($methods = "GET, POST, OPTIONS") {
     header("Content-Type: application/json; charset=utf-8");
-    header("Access-Control-Allow-Origin: http://localhost:5173");
+    header("Access-Control-Allow-Origin: " . INCLUSIJOB_FRONTEND_ORIGIN);
     header("Access-Control-Allow-Credentials: true");
     header("Access-Control-Allow-Headers: Content-Type, Authorization");
     header("Access-Control-Allow-Methods: " . $methods);
@@ -14,11 +16,7 @@ function reclutador_headers($methods = "GET, POST, OPTIONS") {
 }
 
 function reclutador_start_session() {
-    session_set_cookie_params([
-        "httponly" => true,
-        "secure" => false,
-        "samesite" => "Strict"
-    ]);
+    inclusijob_session_cookie_params();
 
     if (session_status() !== PHP_SESSION_ACTIVE) {
         session_start();

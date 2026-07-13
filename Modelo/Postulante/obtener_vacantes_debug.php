@@ -1,20 +1,18 @@
 <?php
+
+require_once __DIR__ . '/../../config/cors.php';
 // ============================================================
 //  obtener_vacantes_debug.php
 //  VERSIÓN TEMPORAL DE DEPURACIÓN — borra este archivo después.
 //  Muestra paso a paso qué está pasando con los datos.
 // ============================================================
 
-session_set_cookie_params([
-    "httponly"  => true,
-    "secure"    => false,
-    "samesite"  => "Strict"
-]);
+inclusijob_session_cookie_params();
 
 session_start();
 
 header("Content-Type: application/json; charset=utf-8");
-header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Origin: " . INCLUSIJOB_FRONTEND_ORIGIN);
 header("Access-Control-Allow-Credentials: true");
 
 if (!isset($_SESSION["user"]["id"])) {
