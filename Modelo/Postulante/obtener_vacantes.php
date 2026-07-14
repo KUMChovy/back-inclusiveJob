@@ -43,7 +43,7 @@ if (!isset($_SESSION["user"]["id"])) {
 
 $id_usuario = (int)$_SESSION["user"]["id"];
 
-require_once "../../conexion.php";
+require_once "../../Conexion.php";
 $con = conectarbd();
 
 // ── 2. Obtener id_postulante ─────────────────────────────────

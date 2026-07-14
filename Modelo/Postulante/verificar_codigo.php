@@ -128,7 +128,7 @@ mysqli_begin_transaction($con);
 
 try {
     $stmtIns = mysqli_prepare($con,
-        "INSERT INTO usuarios (nombres, apellidos, correo, contraseña, telefono, correo_validado, id_rol)
+        "INSERT INTO usuarios (nombres, apellidos, correo, contraseÃ±a, telefono, correo_validado, id_rol)
          VALUES (?, ?, ?, ?, ?, 1, ?)"
     );
 

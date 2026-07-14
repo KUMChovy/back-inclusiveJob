@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-require_once '../../conexion.php';
+require_once '../../Conexion.php';
 
 $body   = json_decode(file_get_contents('php://input'), true);
 $correo = trim($body['correo'] ?? '');

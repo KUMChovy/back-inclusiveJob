@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../../Conexion.php';
 $con = conectarbd();
 
-// â”€â”€ Helper respuesta â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Helper respuesta
 function responder(bool $ok, string $mensaje, mixed $datos = null, int $code = 200): void
 {
     http_response_code($code);
@@ -31,7 +31,7 @@ function responder(bool $ok, string $mensaje, mixed $datos = null, int $code = 2
 
 $accion = $_GET['accion'] ?? '';
 
-// GET  â€” listar empresas con filtros y bÃºsqueda
+// GET - listar empresas con filtros y busqueda
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'listar') {
 
     $estado = $_GET['estado'] ?? 'todas';    // todas | 0 (pendiente) | 1 (aprobada)
@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'listar') {
     $limite = max(1, min(100, (int)($_GET['limite'] ?? 15)));
     $offset = ($pagina - 1) * $limite;
 
-    // Construir WHERE dinÃ¡mico
+    // Construir WHERE dinamico
     $condiciones = [];
     $params      = [];
     $tipos        = '';
@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'listar') {
     mysqli_stmt_execute($stmtT);
     $total = (int) mysqli_fetch_assoc(mysqli_stmt_get_result($stmtT))['total'];
 
-    // Datos + nÃºmero de reclutadores por empresa
+    // Datos + numero de reclutadores por empresa
     $sql = "
         SELECT
             e.id_empresas,
@@ -116,9 +116,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'listar') {
     ]);
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// GET  â€” detalle de una empresa
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ------------------------------------------------------------
+// GET - detalle de una empresa
+// ------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'detalle') {
 
     $id = (int)($_GET['id'] ?? 0);
@@ -173,9 +173,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'detalle') {
     ]);
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// POST â€” aprobar empresa  (estado_validacion = 1)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ------------------------------------------------------------
+// POST - aprobar empresa (estado_validacion = 1)
+// ------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'aprobar') {
 
     $id = (int)($_GET['id'] ?? 0);
@@ -192,9 +192,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'aprobar') {
     responder(true, 'Empresa aprobada correctamente.');
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// POST â€” rechazar empresa  (estado_validacion = 2)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ------------------------------------------------------------
+// POST - rechazar empresa (estado_validacion = 2)
+// ------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'rechazar') {
 
     $id   = (int)($_GET['id'] ?? 0);
@@ -203,7 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'rechazar') {
 
     if (!$id) responder(false, 'ID requerido.', null, 400);
 
-    // Guardamos estado 2 = rechazada; si quieres un campo motivo en BD, agrÃ©galo
+    // Guardamos estado 2 = rechazada; si quieres un campo motivo en BD, agregalo
     $stmt = mysqli_prepare($con, "UPDATE empresas SET estado_validacion = 2 WHERE id_empresas = ?");
     mysqli_stmt_bind_param($stmt, 'i', $id);
     $ok = mysqli_stmt_execute($stmt);
@@ -215,9 +215,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'rechazar') {
     responder(true, 'Empresa rechazada.');
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// POST â€” suspender empresa  (estado_validacion = 3)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ------------------------------------------------------------
+// POST - suspender empresa (estado_validacion = 3)
+// ------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'suspender') {
 
     $id = (int)($_GET['id'] ?? 0);
@@ -234,9 +234,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'suspender') {
     responder(true, 'Empresa suspendida.');
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// POST â€” reactivar empresa (estado_validacion = 1)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ------------------------------------------------------------
+// POST - reactivar empresa (estado_validacion = 1)
+// ------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'reactivar') {
 
     $id = (int)($_GET['id'] ?? 0);
@@ -253,4 +253,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'reactivar') {
     responder(true, 'Empresa reactivada.');
 }
 
-responder(false, 'AcciÃ³n no reconocida.', null, 400);
+responder(false, 'Accion no reconocida.', null, 400);

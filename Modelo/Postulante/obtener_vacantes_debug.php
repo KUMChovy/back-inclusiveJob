@@ -22,7 +22,7 @@ if (!isset($_SESSION["user"]["id"])) {
 
 $id_usuario = (int)$_SESSION["user"]["id"];
 
-require_once "../../conexion.php";
+require_once "../../Conexion.php";
 $con = conectarbd();
 
 $debug = ["id_usuario" => $id_usuario];

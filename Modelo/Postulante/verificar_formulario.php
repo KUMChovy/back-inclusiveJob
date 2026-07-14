@@ -27,7 +27,7 @@ if (!isset($_SESSION["user"]["id"])) {
 $id_usuario = (int)$_SESSION["user"]["id"];
 
 // ── 2. Conectar a la BD ──────────────────────────────────────
-require_once '../../conexion.php';
+require_once '../../Conexion.php';
 $con = conectarbd();
 
 // ── 3. Buscar el postulante y verificar si completó el form ──

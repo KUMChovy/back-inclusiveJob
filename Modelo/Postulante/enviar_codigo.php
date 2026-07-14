@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-require_once '../../conexion.php';   // sube de Postulante → Modelo → back-inclusiveJob
+require_once '../../Conexion.php';   // sube de Postulante → Modelo → back-inclusiveJob
 
 // ── 1. Leer y validar el body ────────────────────────────────
 $body   = json_decode(file_get_contents('php://input'), true);
