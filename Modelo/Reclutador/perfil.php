@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../../Conexion.php';
+require_once __DIR__ . '/../usuarios_telefono.php';
 
 reclutador_headers();
 
@@ -182,6 +183,10 @@ if ($accion === "actualizar" && $_SERVER["REQUEST_METHOD"] === "POST") {
 
     if ($empresa === "") {
         reclutador_responder(false, "La empresa es obligatoria.", null, 400);
+    }
+
+    if ($telefono !== "" && usuario_telefono_duplicado($con, $telefono, $id_usuario)) {
+        reclutador_responder(false, "Este numero de telefono ya esta registrado por otro usuario.", null, 409);
     }
 
     $actual = perfil_reclutador_empresa_actual($con, $id_usuario);

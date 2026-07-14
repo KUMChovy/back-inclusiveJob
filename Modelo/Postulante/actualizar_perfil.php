@@ -30,6 +30,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 }
 
 require_once __DIR__ . "/../../Conexion.php";
+require_once __DIR__ . "/../usuarios_telefono.php";
 $con = conectarbd();
 mysqli_set_charset($con, "utf8mb4");
 
@@ -192,6 +193,10 @@ if ($apellidos === "" || !preg_match($regexTexto, $apellidos)) {
 // solo al numero nacional, no a la LADA.
 if ($telefono !== "" && !preg_match('/^[0-9]{10}$/', $telefonoNacional)) {
     $errores[] = "El campo 'telefono' debe contener 10 digitos sin contar la LADA.";
+}
+
+if ($telefono !== "" && usuario_telefono_duplicado($con, $telefono, $id_usuario)) {
+    $errores[] = "Este numero de telefono ya esta registrado por otro usuario.";
 }
 
 // esfuerzo_fisico_posible: numerico, dentro de un rango valido (0-1 o 1-5, ajusta segun tu escala)

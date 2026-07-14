@@ -28,7 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-require_once '../../conexion.php';
+require_once __DIR__ . '/../../Conexion.php';
+require_once __DIR__ . '/../usuarios_telefono.php';
 
 $body   = json_decode(file_get_contents('php://input'), true);
 $correo = trim($body['correo'] ?? '');
@@ -123,6 +124,16 @@ if (!in_array($id_rol, [2, 3], true)) {
 }
 
 $tablaPerfil = $id_rol === 3 ? 'reclutadores' : 'postulantes';
+
+if (usuario_telefono_duplicado($con, $telefono)) {
+    mysqli_close($con);
+    http_response_code(409);
+    echo json_encode([
+        'success' => false,
+        'mensaje' => 'Este numero de telefono ya esta registrado.'
+    ]);
+    exit;
+}
 
 mysqli_begin_transaction($con);
 

@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../usuarios_telefono.php';
+
 if (!function_exists('prepararConsulta')) {
     function prepararConsulta($con, string $sql) {
         $stmt = $con->prepare($sql);
@@ -27,6 +29,13 @@ function registrarPostulante($con, $nombres, $correo, $password, $telefono) {
         ];
     }
     $check->close();
+
+    if (usuario_telefono_duplicado($con, $telefono)) {
+        return [
+            "success" => false,
+            "message" => "Este numero de telefono ya esta registrado"
+        ];
+    }
 
     // La cuenta real se crea hasta que el usuario valida el codigo por correo.
     $hash = password_hash($password, PASSWORD_BCRYPT);
