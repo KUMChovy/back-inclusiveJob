@@ -146,6 +146,24 @@ function vacante_pertenece_reclutador($con, $id_vacante, $id_reclutador) {
     return (bool)$row;
 }
 
+function vacante_eliminar_relacion($con, $tabla, $columna, $id_vacante) {
+    if (!reclutador_columna_existe($con, $tabla, $columna)) {
+        return true;
+    }
+
+    $stmt = mysqli_prepare($con, "DELETE FROM `$tabla` WHERE `$columna` = ?");
+
+    if (!$stmt) {
+        return false;
+    }
+
+    mysqli_stmt_bind_param($stmt, "i", $id_vacante);
+    $ok = mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+
+    return $ok;
+}
+
 function vacante_empresa_validada($con, $id_reclutador) {
     $u_validada = reclutador_columna_existe($con, "usuarios", "empresa_validada") ? "u.empresa_validada" : "NULL";
     $sql = "SELECT COALESCE(e.estado_validacion, $u_validada, 0) AS empresa_validada
@@ -366,13 +384,20 @@ if ($accion === "eliminar") {
     [$vacante_col] = vacante_discapacidad_columnas($con);
     mysqli_begin_transaction($con);
 
-    $stmt_rel = mysqli_prepare($con, "DELETE FROM vacante_discapacidad WHERE `$vacante_col` = ?");
-    mysqli_stmt_bind_param($stmt_rel, "i", $id_vacante);
-    if (!mysqli_stmt_execute($stmt_rel)) {
+    if (!vacante_eliminar_relacion($con, "reporte_vacante", "id_vacante", $id_vacante)) {
+        mysqli_rollback($con);
+        reclutador_responder(false, "No se pudieron eliminar los reportes relacionados con la vacante.", null, 500);
+    }
+
+    if (!vacante_eliminar_relacion($con, "postulaciones", "id_vacante", $id_vacante)) {
+        mysqli_rollback($con);
+        reclutador_responder(false, "No se pudieron eliminar las postulaciones relacionadas con la vacante.", null, 500);
+    }
+
+    if (!vacante_eliminar_relacion($con, "vacante_discapacidad", $vacante_col, $id_vacante)) {
         mysqli_rollback($con);
         reclutador_responder(false, "No se pudieron eliminar las discapacidades de la vacante.", null, 500);
     }
-    mysqli_stmt_close($stmt_rel);
 
     $stmt = mysqli_prepare($con, "DELETE FROM vacantes WHERE id_vacante = ? AND id_reclutador = ?");
     mysqli_stmt_bind_param($stmt, "ii", $id_vacante, $id_reclutador);
