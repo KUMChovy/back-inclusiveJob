@@ -43,10 +43,21 @@ $user = [
 ];
 
 $empresa_validada = (int)($user_row["empresa_validada"] ?? 0);
+$empresa_estado = "pendiente";
+if ($empresa_validada === 1) {
+    $empresa_estado = "aprobada";
+} elseif ($empresa_validada === 2) {
+    $empresa_estado = "rechazada";
+} elseif ($empresa_validada === 3) {
+    $empresa_estado = "suspendida";
+}
+
 $empresa = [
     "nombre" => $user_row["empresa"] ?: "Empresa sin registrar",
     "aprobada" => $empresa_validada === 1,
-    "estado" => $empresa_validada === 1 ? "aprobada" : "pendiente"
+    "estado" => $empresa_estado,
+    "estado_validacion" => $empresa_validada,
+    "requiere_reenvio" => $empresa_validada === 2
 ];
 
 function scalar_query($con, $sql, $types, ...$params) {

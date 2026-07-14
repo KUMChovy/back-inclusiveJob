@@ -21,8 +21,25 @@ function empresa_normalizar_telefono($telefono_raw) {
         reclutador_responder(false, "El numero de telefono solo puede contener numeros, espacios, guiones o parentesis.", null, 400);
     }
 
-    if (strlen($digitos) < 10 || strlen($digitos) > 15) {
-        reclutador_responder(false, "El numero de telefono debe tener entre 10 y 15 digitos.", null, 400);
+    $ladas = [
+        "502", "503", "504", "505", "506", "507",
+        "591", "593", "595", "598",
+        "52", "34", "54", "56", "57", "51", "58", "55",
+        "1"
+    ];
+
+    $nacional = $digitos;
+    if (strlen($digitos) > 10) {
+        foreach ($ladas as $lada) {
+            if (strpos($digitos, $lada) === 0 && strlen($digitos) > strlen($lada)) {
+                $nacional = substr($digitos, strlen($lada));
+                break;
+            }
+        }
+    }
+
+    if (!preg_match('/^[0-9]{10}$/', $nacional)) {
+        reclutador_responder(false, "El numero de telefono debe contener 10 digitos sin contar la LADA.", null, 400);
     }
 
     return $digitos;
@@ -44,6 +61,7 @@ if ($accion === "obtener") {
                 COALESCE(e.descripcion, $u_descripcion, '') AS descripcion_empresa,
                 COALESCE(e.direccion, $u_direccion, '') AS direccion_empresa,
                 COALESCE(e.estado_validacion, $u_validada, 0) AS empresa_validada,
+                COALESCE(e.estado_validacion, $u_validada, 0) AS estado_validacion,
                 e.id_empresas
             FROM usuarios u
             LEFT JOIN reclutadores r ON r.id_usuario = u.id_usuario
@@ -61,6 +79,9 @@ if ($accion === "obtener") {
     }
 
     $row["empresa_validada"] = (int)$row["empresa_validada"];
+    $row["estado_validacion"] = (int)$row["estado_validacion"];
+    $row["empresa_rechazada"] = $row["estado_validacion"] === 2;
+    $row["requiere_reenvio"] = $row["estado_validacion"] === 2;
     reclutador_responder(true, "Datos de la empresa obtenidos", $row);
 }
 
@@ -96,7 +117,8 @@ if ($accion === "actualizar" && $_SERVER["REQUEST_METHOD"] === "POST") {
 
     $empresa_actual = $current["nombre_empresas"] ?? "";
     $validacion_actual = (int)($current["estado_validacion"] ?? 0);
-    $nueva_validacion = ($nombre_empresa !== $empresa_actual) ? 0 : $validacion_actual;
+    $empresa_rechazada = $validacion_actual === 2;
+    $nueva_validacion = ($empresa_rechazada || $nombre_empresa !== $empresa_actual) ? 0 : $validacion_actual;
     $id_empresas = (int)($current["id_empresas"] ?? 0);
 
     if (!$id_empresas) {
@@ -156,7 +178,11 @@ if ($accion === "actualizar" && $_SERVER["REQUEST_METHOD"] === "POST") {
 
     reclutador_responder(true, "Datos corporativos actualizados", [
         "empresa_validada" => $nueva_validacion,
-        "cambio_nombre" => $nombre_empresa !== $empresa_actual
+        "estado_validacion" => $nueva_validacion,
+        "empresa_rechazada" => false,
+        "requiere_reenvio" => false,
+        "cambio_nombre" => $nombre_empresa !== $empresa_actual,
+        "reenvio_revision" => $empresa_rechazada
     ]);
 }
 

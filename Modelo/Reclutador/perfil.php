@@ -87,6 +87,37 @@ function perfil_reclutador_input() {
     return reclutador_json_body();
 }
 
+function perfil_reclutador_normalizar_telefono($telefono_raw) {
+    $digitos = preg_replace('/\D+/', '', (string)$telefono_raw);
+
+    if ($digitos === '') {
+        return "";
+    }
+
+    $ladas = [
+        "502", "503", "504", "505", "506", "507",
+        "591", "593", "595", "598",
+        "52", "34", "54", "56", "57", "51", "58", "55",
+        "1"
+    ];
+
+    $nacional = $digitos;
+    if (strlen($digitos) > 10) {
+        foreach ($ladas as $lada) {
+            if (strpos($digitos, $lada) === 0 && strlen($digitos) > strlen($lada)) {
+                $nacional = substr($digitos, strlen($lada));
+                break;
+            }
+        }
+    }
+
+    if (!preg_match('/^[0-9]{10}$/', $nacional)) {
+        reclutador_responder(false, "El telefono debe contener 10 digitos sin contar la LADA.", null, 422);
+    }
+
+    return $digitos;
+}
+
 function perfil_reclutador_guardar_foto($id_usuario) {
     if (empty($_FILES["fotoPerfil"]["name"])) {
         return null;
@@ -140,7 +171,7 @@ if ($accion === "actualizar" && $_SERVER["REQUEST_METHOD"] === "POST") {
 
     $nombres = trim($input["nombres"] ?? "");
     $apellidos = trim($input["apellidos"] ?? "");
-    $telefono = trim($input["telefono"] ?? "");
+    $telefono = perfil_reclutador_normalizar_telefono($input["telefono"] ?? "");
     $empresa = trim($input["empresa"] ?? "");
     $puesto = trim($input["puesto"] ?? "Reclutador");
     $sector = trim($input["sector"] ?? "No especificado");

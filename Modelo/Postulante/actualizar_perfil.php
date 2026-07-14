@@ -63,10 +63,39 @@ function limpiar($v) {
     return htmlspecialchars(strip_tags(trim((string)$v)), ENT_QUOTES, "UTF-8");
 }
 
+function separar_telefono_lada($telefono_raw) {
+    $digitos = preg_replace('/\D+/', '', (string)$telefono_raw);
+
+    if ($digitos === '') {
+        return ["completo" => "", "nacional" => ""];
+    }
+
+    $ladas = [
+        "502", "503", "504", "505", "506", "507",
+        "591", "593", "595", "598",
+        "52", "34", "54", "56", "57", "51", "58", "55",
+        "1"
+    ];
+
+    $nacional = $digitos;
+    if (strlen($digitos) > 10) {
+        foreach ($ladas as $lada) {
+            if (strpos($digitos, $lada) === 0 && strlen($digitos) > strlen($lada)) {
+                $nacional = substr($digitos, strlen($lada));
+                break;
+            }
+        }
+    }
+
+    return ["completo" => $digitos, "nacional" => $nacional];
+}
+
 // ── Leer campos de $_POST (FormData) ─────────────────────────
 $nombres   = limpiar($_POST["nombres"]   ?? "");
 $apellidos = limpiar($_POST["apellidos"] ?? "");
-$telefono  = limpiar($_POST["telefono"]  ?? "");
+$telefonoInfo = separar_telefono_lada($_POST["telefono"] ?? "");
+$telefono  = $telefonoInfo["completo"];
+$telefonoNacional = $telefonoInfo["nacional"];
 $experiencia = limpiar($_POST["experiencia"] ?? "");
 $portafolio  = limpiar($_POST["portafolio_url"] ?? "");
 $esfuerzo    = isset($_POST["esfuerzo_fisico_posible"]) ? trim((string)$_POST["esfuerzo_fisico_posible"]) : "";
@@ -159,9 +188,10 @@ if ($apellidos === "" || !preg_match($regexTexto, $apellidos)) {
     $errores[] = "El campo 'apellidos' no debe superar 150 caracteres.";
 }
 
-// telefono: solo numeros, entre 7 y 9 digitos (ajusta segun tu pais)
-if ($telefono !== "" && !preg_match('/^[0-9]{10}$/', $telefono)) {
-    $errores[] = "El campo 'telefono' debe contener 10 digitos.";
+// telefono: se guarda con LADA, pero la validacion de 10 digitos aplica
+// solo al numero nacional, no a la LADA.
+if ($telefono !== "" && !preg_match('/^[0-9]{10}$/', $telefonoNacional)) {
+    $errores[] = "El campo 'telefono' debe contener 10 digitos sin contar la LADA.";
 }
 
 // esfuerzo_fisico_posible: numerico, dentro de un rango valido (0-1 o 1-5, ajusta segun tu escala)
