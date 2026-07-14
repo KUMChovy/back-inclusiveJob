@@ -87,7 +87,7 @@ function notificar_reclutador_reporte(mysqli $con, array $reporte, string $accio
         $resultado = 'reporte_ignorado_admin';
         $tipo = 'reporte_resuelto';
     } elseif ($accion === 'vacante_eliminada') {
-        $texto = "⚠️ Administracion reviso un reporte sobre \"{$tituloVacante}\" y marco la vacante como eliminada. Revisa tus publicaciones para evitar futuras sanciones.";
+        $texto = "Administracion reviso un reporte sobre \"{$tituloVacante}\" y marco la vacante como suspendida. Revisa tus publicaciones para evitar futuras sanciones.";
         if ($comentarioAdmin !== '') {
             $texto .= " Motivo del administrador: {$comentarioAdmin}";
         }
@@ -116,7 +116,7 @@ function notificar_reclutador_reporte(mysqli $con, array $reporte, string $accio
 
     $mensajeUsuario = $accion === 'ignorado'
         ? 'Administracion descarto un reporte de vacante'
-        : 'Administracion elimino una vacante reportada';
+        : 'Administracion suspendio una vacante reportada';
     $respuesta = json_encode($payload, JSON_UNESCAPED_UNICODE);
 
     $stmt = mysqli_prepare($con, "
@@ -283,14 +283,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'eliminar_vacante') {
 
     if (!$okVacante || !$okReportes) {
         mysqli_rollback($con);
-        responder(false, 'No se pudo eliminar la vacante reportada.', null, 400);
+        responder(false, 'No se pudo suspender la vacante reportada.', null, 400);
     }
 
     notificar_reclutador_reporte($con, $reporte, 'vacante_eliminada', $comentarioAdmin);
 
     mysqli_commit($con);
     mysqli_close($con);
-    responder(true, 'Vacante eliminada.', ['id_vacante' => $idVacante]);
+    responder(true, 'Vacante suspendida.', ['id_vacante' => $idVacante]);
 }
 
 responder(false, 'Acción no reconocida.', null, 400);

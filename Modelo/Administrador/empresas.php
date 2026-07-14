@@ -29,6 +29,34 @@ function responder(bool $ok, string $mensaje, mixed $datos = null, int $code = 2
     exit;
 }
 
+function column_exists(mysqli $con, string $table, string $column): bool
+{
+    $safeTable = mysqli_real_escape_string($con, $table);
+    $safeColumn = mysqli_real_escape_string($con, $column);
+    $res = mysqli_query($con, "SHOW COLUMNS FROM `$safeTable` LIKE '$safeColumn'");
+    return $res && mysqli_num_rows($res) > 0;
+}
+
+function empresa_rfc_select(mysqli $con, string $empresaAlias = 'e', string $usuarioAlias = 'u'): string
+{
+    $empresaTieneRfc = column_exists($con, 'empresas', 'rfc');
+    $usuarioTieneRfc = column_exists($con, 'usuarios', 'rfc_empresa');
+
+    if ($empresaTieneRfc && $usuarioTieneRfc) {
+        return "COALESCE(NULLIF($empresaAlias.rfc, ''), MAX(NULLIF($usuarioAlias.rfc_empresa, '')), '') AS rfc";
+    }
+
+    if ($empresaTieneRfc) {
+        return "COALESCE($empresaAlias.rfc, '') AS rfc";
+    }
+
+    if ($usuarioTieneRfc) {
+        return "COALESCE(MAX(NULLIF($usuarioAlias.rfc_empresa, '')), '') AS rfc";
+    }
+
+    return "'' AS rfc";
+}
+
 $accion = $_GET['accion'] ?? '';
 
 // GET - listar empresas con filtros y busqueda
@@ -52,28 +80,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'listar') {
     }
 
     if ($buscar !== '') {
-        $condiciones[] = '(e.nombre_empresas LIKE ? OR e.correo_empresa LIKE ? OR e.direccion LIKE ?)';
+        $searchParts = ['e.nombre_empresas LIKE ?', 'e.correo_empresa LIKE ?', 'e.direccion LIKE ?'];
+        if (column_exists($con, 'empresas', 'rfc')) {
+            $searchParts[] = 'e.rfc LIKE ?';
+        }
+        if (column_exists($con, 'usuarios', 'rfc_empresa')) {
+            $searchParts[] = 'u.rfc_empresa LIKE ?';
+        }
+
+        $condiciones[] = '(' . implode(' OR ', $searchParts) . ')';
         $like = "%{$buscar}%";
-        $params[] = $like;
-        $params[] = $like;
-        $params[] = $like;
-        $tipos .= 'sss';
+        foreach ($searchParts as $_) {
+            $params[] = $like;
+            $tipos .= 's';
+        }
     }
 
     $where = count($condiciones) ? 'WHERE ' . implode(' AND ', $condiciones) : '';
 
     // Total
-    $sqlTotal = "SELECT COUNT(*) AS total FROM empresas e $where";
+    $sqlTotal = "
+        SELECT COUNT(DISTINCT e.id_empresas) AS total
+        FROM empresas e
+        LEFT JOIN reclutadores r ON r.id_empresas = e.id_empresas
+        LEFT JOIN usuarios u ON u.id_usuario = r.id_usuario
+        $where
+    ";
     $stmtT = mysqli_prepare($con, $sqlTotal);
     if ($params) mysqli_stmt_bind_param($stmtT, $tipos, ...$params);
     mysqli_stmt_execute($stmtT);
     $total = (int) mysqli_fetch_assoc(mysqli_stmt_get_result($stmtT))['total'];
 
     // Datos + numero de reclutadores por empresa
+    $rfcSelect = empresa_rfc_select($con);
     $sql = "
         SELECT
             e.id_empresas,
             e.nombre_empresas,
+            $rfcSelect,
             e.descripcion,
             e.direccion,
             e.telefono_empresa,
@@ -85,6 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'listar') {
             COUNT(DISTINCT v.id_vacante) AS total_vacantes
         FROM empresas e
         LEFT JOIN reclutadores r ON r.id_empresas = e.id_empresas
+        LEFT JOIN usuarios u     ON u.id_usuario = r.id_usuario
         LEFT JOIN vacantes v     ON v.id_reclutador = r.id_reclutador
         $where
         GROUP BY e.id_empresas
@@ -125,7 +170,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $accion === 'detalle') {
     if (!$id) responder(false, 'ID requerido.', null, 400);
 
     // Datos empresa
-    $stmt = mysqli_prepare($con, "SELECT * FROM empresas WHERE id_empresas = ?");
+    $rfcSelect = empresa_rfc_select($con);
+    $stmt = mysqli_prepare($con, "
+        SELECT e.*, $rfcSelect
+        FROM empresas e
+        LEFT JOIN reclutadores r ON r.id_empresas = e.id_empresas
+        LEFT JOIN usuarios u ON u.id_usuario = r.id_usuario
+        WHERE e.id_empresas = ?
+        GROUP BY e.id_empresas
+    ");
     mysqli_stmt_bind_param($stmt, 'i', $id);
     mysqli_stmt_execute($stmt);
     $empresa = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));

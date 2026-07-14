@@ -310,10 +310,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion === 'eliminar') {
     mysqli_stmt_bind_param($stmt, 'i', $id);
     $ok = mysqli_stmt_execute($stmt);
 
-    if (!$ok || mysqli_stmt_affected_rows($stmt) === 0) responder(false, 'No se pudo eliminar la vacante.', null, 400);
+    if (!$ok || mysqli_stmt_affected_rows($stmt) === 0) responder(false, 'No se pudo suspender la vacante.', null, 400);
 
     mysqli_close($con);
-    responder(true, 'Vacante eliminada.');
+    responder(true, 'Vacante suspendida.');
 }
 
 responder(false, 'Acción no reconocida.', null, 400);
